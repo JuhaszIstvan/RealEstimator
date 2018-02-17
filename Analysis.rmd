@@ -1086,7 +1086,7 @@ xyplot(resid(LM_model7) ~ predict(LM_model7), type = c("p", "g"), xlab = "Predic
 ```{r improvement_MLresults}
 ```
 
-Use bagging or boosting tto imrpove the well performing models. 
+Use bagging or boosting to improve the well performing models. 
 ```{r ensemble_methods}
 ```
 
