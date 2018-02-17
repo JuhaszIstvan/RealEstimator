@@ -1,0 +1,1125 @@
+---
+title: "Analysis of the real estate market of Hungary"
+output:
+  html_document:
+    df_print: kable
+    number_sections: yes
+    toc: yes
+---
+
+
+
+#Introduction
+
+##Motivation
+In this document, I will attempt to analyse the real estate market using the data collected from the largest Hungarian classified ads website jofogas.hu
+
+The motivation for this analysis is to serve threefold:It is primarily an educational project for building skills in web-scraping, data analysis and machine learning which should be equally useful as a presentation of the authors skills during a possible job hunt. The third reason for creating this document is to use the collected information for evaluating offers.
+
+The initial  question I am attempting to answer here is "Using the data acquired via the crawler, what algorithm can serve as an accurate enough model for predicting the ask price of these condiniums. Conversely, which algorithm describes the advertisement period of these apartments. 
+
+##Research Question
+I did not have time to accurately address the following questions: 
+
+An additional question would be: instead of taking snapshots of the data, define this dataset as a time series would allow us to make any conclusions.
+
+Further more, can we use machine learning to identify mortgage claim peddlers? 
+
+Can we use classification tasks to identify ads of the same property? 
+
+
+##Limitations, technical background
+
+Jofogas.hu was founded in 2010 and got subsequently purchased by the Norwegian  Schibsted Media Group which one quasi monopoly over the Hungarian classified ads market when, in 2015, purchased its local rival, OLX.hu.
+
+In addition to using only one site not every site operating on the market, the scope of subject was also limited to the condinium type of offers posted in the capital of Hungary, Budapest. 
+
+The reason for using jofogas.hu instead of ingatlan.com with its twice as large database comes down to some embarrassingly technical reasons. The night I have started this project was also the night ingatlan.com was down.  Which is a problem because apart from a twice as large ad population, ingatlan.com is forcing a rather rigid postal address information table on a the would-be sellers which means that the location data collected from them is tidy (compete and accurate). The silver lining is that jofogas.hu in addition to being a general ad site covering a wide array of markets, the cocmpany also manages the largest second hand automobile online marketplace hasznaltauto.hu which in turn raises the possibility for the code produced in this exercise to be adopted and adapted and repurposed for and by other projects.
+The freetext-produced location data, however, is going to be a rather huge problem. I doubt anyone needs to be reminded of the tricolon describing the ultimate maxim on the real estate market: "Location, ocation,location!"
+
+The data was gathered using web crawler I have written in R using the rvest package. The script is capable of handling multiple projects, designed to automatically update the local database daily. Aside from the published attributes, the script retroactively calculates the expiration date from the last two sampling in which between the ad stopped showing up.
+
+Due its incremental nature, this research grants us the ability to measure the length of the advertisements and any changes in the ad population. Unfortunately, as of 2017-12-30, there are no mechanics implemented for identifying ads by multiple users. 
+
+The data analysis was performed using R packages, primarily by the caret package which offers a uniform a interface for doing predictive analysis on several hundreds of packages.
+
+At some parts,mostly where the larger data.frames are handled, I have opted for using the sqldf package in conjunction with SQLite over the dplyr or base R in anticipation of the need to offload some of the database management tasks to a proper SQL server.
+
+For this analysis, J am going to use the data collected with session ID:
+JofogasLakasokBPFull_20180101_23295P
+
+
+#Loading the data and packages
+
+```{r setup, results='hide',message=FALSE}
+library(caret)
+library(Amelia)
+library(sqldf)
+library(tidyverse)
+library(dplyr)
+library(reshape2)
+library(randomForest)
+library(gridExtra)
+library(modelr)
+library(stringi)
+library(RWeka)
+set.seed(7)
+LocationData=FALSE
+ZipData=TRUE
+DOsvm=FALSE
+```
+
+Loading the Session and general session information.
+
+```{r load_data}
+AnalysisSessionID<-"JofogasLakasokBPFull_20180106_2236JF"
+AnalysisAdListFile<-"FullBudapestAdLists.Rda"
+AnalysisAdDetailListFile<-"Detailedhirdetes.Rda"
+
+AnalysisSessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
+AnalysisSessionRecord<-AnalysisSessionTable[AnalysisSessionTable$SessionID==AnalysisSessionID,]
+ForShowTable<-t(AnalysisSessionRecord)
+colnames(ForShowTable)<-c("Value")
+knitr::kable(ForShowTable,format="html", pad=0)
+
+QueryEndTime<-AnalysisSessionRecord$QueryAdDetailEndTime
+AnalysisAdList<-readRDS(file=AnalysisAdListFile, refhook =NULL)
+AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
+AnalysisAdList<-AnalysisAdList[AnalysisAdList$SessionID==AnalysisSessionID,'SiteID']
+#AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% AnalysisAdList,]
+n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
+```
+
+#Exploratory Data Analysis
+
+##Duplicate values
+
+Checking for duplicates reveals *`r nrow(n_occur[n_occur$Freq > 1,])`* a major error in the data collection process:In order to be able to track changes in price, the cawler stores postings whose prices have altered as additional records. Since the crawler scan use the siteid as keys, the queries return all the instances of an ad.. 
+
+Since writing the following paragraph, I have realised that I could have used the SiteID+Price as composite keys and thus render it redundant regarding the problem discussed above, it does serve as a working solution for eliminating duplicates created for any other reason thereby increasing the robustness of the analysis. 
+
+In order to combat duplication , we could grab either the latest entry, or we could go for the entry that was online at the time of taking the snapsot. The latter has the advantage of rendering the data 'immutable', fixed.  To identify the relevant records, I cannot rely on any SessionIds as unchanged records would carry a prior scans' IDs. Luckily we have the timestamp of finishing the query and the query date of each record stored, with these piece of data, we can find the records that were created last or closest to the time of the snapshot while preceeding it.  Who knew playing safe and documenting everything could prove a venue for salvaging the project('s accuracy) against an unforseen issue? I did. I have been burnt before. A lot. 
+
+
+```{r identifying_the_proper_IDs}
+rm(n_occur)
+AnalysisAdDetailList$Deviance<-ifelse(QueryEndTime-AnalysisAdDetailList$QueryTime>0,QueryEndTime-AnalysisAdDetailList$QueryTime,9999999999999)
+#AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Deviance)),]
+#AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID), ]
+n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
+
+AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(QueryTime,decreasing = T)),]
+
+#TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order("QueryTime"),decreasing=TRUE), ]
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","Description","Kerulet")]),]
+
+```
+
+After finishing the above, the dataset looks much much better now with `r nrow(n_occur[n_occur$Freq > 1,])` number of dupicates. 
+
+
+
+##General overview
+
+Using the Amelia package, we can see how much data do we truly have:
+
+```{r missmap, echo=TRUE,show=TRUE}
+missmap(AnalysisAdDetailList, main = "Missing values vs observed")
+```
+
+... and the summary of the dataset:
+```{r summary, echo=TRUE,show=TRUE}
+dim(AnalysisAdDetailList)
+summary(AnalysisAdDetailList)
+```
+
+Most variables are categorical or logical. There are three time columns: the the publish time of the ad, the calculated end time of the ad and the query time. As for numerical data, we have the commonidium charges, the independent variable, price (Ár) and the floorsize. 
+
+Some models benefit greatly from the standardisation of numerical variables. 
+
+1.Skewedness could be addressed by Box-Cox transfomation
+1.Outliers could be transformed by mapping tham on a sphare(look it up)
+1. bye
+
+
+
+##Numerical Variables
+
+Numerical 
+
+##Price - Ar
+It is unnecessary to keep Price in such a high digit. 
+
+```{r wrangling_Ar}
+AnalysisAdDetailList$ArMil<-AnalysisAdDetailList$Ar/1000000
+AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$ArMil),]
+ggplot(data = AnalysisAdDetailList) +
+  geom_histogram(mapping = aes(x = ArMil), binwidth = 10)
+```
+Whoa can't even see these outliers
+```{r wrangling_Ar2}
+head(AnalysisAdDetailList[with(AnalysisAdDetailList, order(ArMil),decreasing=T),'Description'])
+```
+
+
+
+
+```{r wrangling_Ar3}
+Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(ArMil,decreasing = T)),]
+
+AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$ArMil),]
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$ArMil<200&AnalysisAdDetailList$ArMil>4,]
+ggplot(data = AnalysisAdDetailList) +
+  geom_histogram(mapping = aes(x = ArMil), binwidth = 10)
+```
+
+The response variable is negatively skewed. a logarithmic transformation might be in order. 
+
+
+The principal numerical pedictive attributes  are floor size (MeretCleared), condiniumal costs, number of rooms and half rooms (rooms whose size falls below 12 sq metersor 129 square feet)  
+
+###Floor size (MeretCleared)
+I am dropping the flats whose floorsize is missing
+
+```{r MeretClearred}
+AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$MeretCleared),]
+AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(-MeretCleared)), ]
+head(AnalysisAdDetailList[,c("SiteID","SiteUrl","MeretCleared")])
+```
+
+```{r PicNums}
+AnalysisAdDetailList$PicNums<-as.character(as.numeric(AnalysisAdDetailList$PicNums))
+
+```
+
+
+
+
+Fortunately the top 3 are development areas. For now, I am going to clip these ads off.
+```{r LargeOutier}
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$MeretCleared<480,]
+```
+the rest f the data looks rather skewed as well a log-log transformation is now almost certainly required.
+
+##Publish Date(PublishedTime)
+The date of the  original publishing of the ad. 
+```{r publishing_date}
+AnalysisAdDetailList$Age<-as.Date(QueryEndTime)-as.Date(AnalysisAdDetailList$PublishedTimeCleared)
+ggplot(data = AnalysisAdDetailList) +
+  geom_histogram(mapping = aes(x = Age), binwidth = 10)
+```
+
+##Categorical predictors
+
+##Query State
+```{r QueryState}
+knitr::kable(as.data.frame(table(AnalysisAdDetailList$QueryState)))
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$QueryState=='No errors recorded',]
+AnalysisAdDetailList$QueryState<-as.factor(AnalysisAdDetailList$QueryState)
+
+```
+
+As we can see, there is only a minimal amount of records missing due to connection errors. These were captured before a secondary loop was implemented in the crawler. Due to the low volume, we can safely drop these.
+
+##Location Data
+
+We have 5 variables for location data: District(Kerulet), LocStreet1,LocStreet2 and longitudinal and latitudinal data. 
+
+District is the top localisation data, only 40 ads were missing. Manual inspection revealed that these Ads were either not flukes which were not from Budapest or missing data. 
+
+##District (Kerulet)
+```{r Kerulet}
+AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$Kerulet),]
+tempvariablename="Kerulet"
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+ggplot(data=AnalysisAdDetailList)+
+  geom_bar(mapping = aes(x = Kerulet), fill='orange')
+ facet_wrap(~ class, nrow = 2)
+```
+
+##Kategoria
+The data is prefiletered at the query level, the varable could safely be dropped:
+```{r Kategoria}
+knitr::kable(as.data.frame(table(AnalysisAdDetailList$Kategoria,useNA="ifany")))
+```
+
+##Binary Features
+These features are checked by the ad-poster and is stored in a single comma joined concatenated string on the website. THe crawer splits it up into individual booleans which then need to be converted into factors below. Due to their checkbox recording, these items can only assume the values of yes/no without missing values. I am going to a wording that makes it immediately obvious that the negative value doesn't necessarily mean explicit false and 'lazily filled forms' will show up here. 
+
+Due to them being binary, there is not a lot of prepocessing could possibly do.
+###Built-in Kitchen(Konyha)
+```{r Kitchen}
+tempvariablename="konyha"
+
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"KitchenIncluded"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"KitchenNotIncl"
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+```{r Parkingspace}
+tempvariablename="Parkolas"
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+templevels<-levels(AnalysisAdDetailList[[tempvariablename]])
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+
+
+
+
+###Accessability(Akadalymentesitett)
+```{r Accessability}
+tempvariablename="Akadalymentesitett"
+
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Handycappeady"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"NothandyCap"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+
+###Appliances (Gepesitett)
+Indicates whether household appliances (washing machine, fridge) are included in the offer. 
+```{r Appliances}
+tempvariablename="Gepesitett"
+
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"MacchineryIncl"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"NotMachinised"
+
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+###Alarm (Riaszto)
+```{r Alarm}
+tempvariablename="Riaszto"
+
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Alarm"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Not_Alarmed"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+#ElevatorLift
+
+```{r Lift}
+tempvariablename="Lift"
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+#Felszobakszama
+
+
+```{r SzobaSzam}
+tempvariablename="Felszobakszama"
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-0
+AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="5+",tempvariablename]<-5
+
+AnalysisAdDetailList[[tempvariablename]]<-as.numeric(AnalysisAdDetailList[[tempvariablename]])
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+
+tempvariablename="SzobaSzamCleared"
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-0
+AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="5+",tempvariablename]<-5
+AnalysisAdDetailList[[tempvariablename]]<-as.numeric(AnalysisAdDetailList[[tempvariablename]])
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+
+```
+
+
+
+
+###Stand-alone Toilet (KulonWC)
+Indicates whether the toilet is located within the bathroom or in a separate room. 
+```{r Stand_alone_WC}
+tempvariablename="KulonWC"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Separate_Toilet"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Not_Separate"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+###Air Conditioning (Legkondicinalo)
+```{r AirConditioning}
+tempvariablename="Legkondicinalo"
+
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"AC"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"AC_Not"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+##State - Állapot 
+```{r Allapot}
+tempvariablename="Allapot"
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+templevels<-levels(AnalysisAdDetailList[[tempvariablename]])
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="Új",tempvariablename]<-"Új építésű"
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+
+##Alternative offer types 
+
+### Lease rights  
+```{r berletijog}
+tempvariablename="Tulajdonjogberletijog"
+
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])=="Bérleti jog",tempvariablename]<-"Lease"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])=="Tulajdonjog",tempvariablename]<-"Ownership"
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","Lease","Ownership"),ordered=F)
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="Ownership",]
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+
+
+
+```
+
+In Hungary, there is a market for leases for social housing. People granted the right to live in this monicipally owned, low rent houses may sell their leases to third parties. If properly filled, the ad contains field the factor "bérleti jog" in the tuladonjogberletijog field. Since this is a completely different market, it needs to be filtered out.
+
+### Claims
+Another latent offer type is "factoring". Claims by financial institutions, are often onloaded to the market intermediaries. These offers can be transformed into property ownership but only several months of litigation and thus, sell on discount. 
+
+Unfortunately, jofogas have not yet implemented a flag for these ads, even though the site claims to do manual a revisions of every single offer posted. Fortunately though, the offeres are often made by whoesalers who create formulaic postings. 
+
+### For Rent
+There are plenty of people who set the for sale/ for rent flags incorrectly. After reviewing the data I  have concluded that no appartment should be rented out under 1'500'000 HUF per month.
+
+For these latter two categores, a classification predictive type of Machine Learning problem could be formulated.
+In addition to the above, it is imperative that we drop ads with missing prices data. 
+
+I am going to drop a few variables as well:
+'Helyseg' - "town" shouldn't even be in the data set, marking this is clearly either an intentional or an accidental clerical error. 
+'Szobakszama' (number of rooms), 'Meret' (floor size),'Havikozoskoltseg' (monthly condo costs) PublishedTime had been parsed and recoded by the crawler so it's rather quite pointless to keep them, just as much as the  helper column 'deviance'.
+
+
+##Ceiling Height
+"room or ceiling height" is basically a proxy for pre- turn-of-the-century (to the 20th I know. I know, it is scary.) or later. The building is considered uneconomical but prestigeous to be build in the style of "large ceiling heights". 
+
+```{r Belmagassag}
+tempvariablename="Belmagassag"
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+## Floor
+```{r Emeleted}
+tempvariablename="Emelet"
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = Emelet, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pEmeletet
+
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+HUngary uses the british type of notations where the first floor is not the ground floor but the one immediately above it. Looking at the caht, it becomes quickly rather quite obvious that while the varianse is striking, it  is far from being linear. it  looks like that the distributions of the first, second, third and forth floors have similar characteristics.  
+
+```{r Emeleted_dichotomised}
+AnalysisAdDetailList$EmeletOrg<-as.factor(AnalysisAdDetailList$Emelet)
+tempvariablename="Emelet"
+AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("1","2","3","4","félemelet","5","6"),tempvariablename]<-"1-6th floors"
+AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("7","8","9","10","10+"),tempvariablename]<-"9+"
+AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("földszint","magasföldszint"),tempvariablename]<-"GroundFloor"
+
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=T)
+
+pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = Emelet, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pEmeletet
+
+#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+##Build technology
+Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
+```{r Building_material}
+tempvariablename="Ingatlantipusa"
+
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","tégla","panel","egyéb"),ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$Ingatlantipusa!="NotSpecified",]
+```
+
+Ingatlantipusa =NA is too scarce, folds don' work?
+
+
+
+
+##Heating Technology
+
+Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
+```{r heating}
+tempvariablename="Futestipusa"
+
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
+```{r garden}
+tempvariablename="Kertkapcsolatos"
+
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+```
+
+
+
+##Description(Description)
+Description is a freetext field. It is a prime target for text analysis. At a later time. 
+
+##Advertiser(Hirdeto)
+
+```{r Hirdeto}
+tempvariablename="Hirdeto"
+#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+```
+
+
+
+```{r neighborhood}
+tempvariablename="neighborhood"
+#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+```
+
+
+
+```{r dropping_columns}
+AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryTime","QueryState"))]
+```
+
+#Data Splitting
+
+CrossValidation is a measure that is  designed to harden the model from the error of overfitting. Overfitting happens when the number of independent variables in the model is so high, that the model begins to predict not the attributes of the population but the sample itself, it starts to show bias. In practice this means that as the number of independent variables increases, the error of the models for the elements of the sample continues to diminish, but the level of error against new observations ulation assumes a U - parabola - shape and begins to increase as lim ->x(i)max. 
+
+Unless the samplesize is prohibitingly small, the sample needs to be split into training and testing subsamples. This, however introduces variance to the equation. Variance, bias computational need and expenses are the factors of the optimisation task of finding the appropriate cross validation technique.
+
+Bias is the bad efficiency of the model.Variance is, however, the ariance of predictive value  from dataset to dataset. Generally speaking, simpler models have more bias but less variance and vica versa.
+
+It is generally true that more complex models can have very high vari-
+ance, which leads to over-fitting. On the other hand, simple models tend not
+to over-fit, but under-fit if they are not flexible enough to model the true
+relationship (thus high bias). Also, highly correlated predictors can lead to
+collinearity issues and this can greatly increase the model varianc
+
+
+It is a two stage process corresponding to the phases of data analysis. 
+1.The first split determines the Test sample upon which the final power of the model will be tested
+
+use the createDataPartition function from caret for stratified random splits. For simple random splits base R's sample might sufice.
+
+1. The second split of the training set will attempt to mitigate variance and bias using resampling.
+
+Splitting the original sample into the test and training can be done using several mathematical methos. The dissimilarity method relies on grabbing the most different obs. after the initial osbervations were selected.
+
+Stratified samples keep the response variable's distribution equal in the test and train subsetted populations. 
+
+Hold-out cross validation is basically simple data spitting with no resampling. 
+
+The k-fold cross validation technique take the sample, cuts into 3-5-10 pieces and runs k number of model fittings with the 1 subsample serving as test sample each. 
+
+k-fold has a relatively high variance value. When using smaller k values, it's variance is matched with the bootstrap method
+
+the leave-one-out-hold out crossvalidation is the extreme version of the k-fold CV where k = n.
+
+
+Bootstrap method selects sample items by allowing observations to be selected multiple times. Some obs. will show up multiple times, some, never. Their variance is relatively small but the bias ould be enormous. 
+
+
+The various crossvalidation techniques combat this by splitting a sample into training and testing subsets. This, ofcourse, can additionally introduce sampling errors.
+
+One of the most widely  used techinque is the so called K-fold crossvalidation, which is essentially test on one, train on K-1 type of configuration with the typical K values of 3,5 and 10.
+
+
+#Data Partitioning
+```{r data_partitioning}
+#ModelData<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet  %in% c("VIII.","IX.") &!(is.na(AnalysisAdDetailList$ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Location1)),]
+
+ModelData<-AnalysisAdDetailList[!(is.na(AnalysisAdDetailList$ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Kerulet)),]
+
+ModelData$Location1<-as.factor(ModelData$Location1)
+
+dim(ModelData)
+
+TrainingIndex <- createDataPartition(ModelData$ArMil, p = .80, list = FALSE,groups = min(5, length(ModelData$ArMil)))
+TrainingSet <- ModelData[ TrainingIndex,]
+TestSet <- ModelData[-TrainingIndex,]
+dim(TrainingSet)
+dim(TestSet)
+```
+
+
+
+##Cross_Validation
+```{r cross_validation}
+TRC_CV10<-trainControl(method="CV", number=10)
+```
+
+##Model selection
+
+
+1.Models have different attributes. accuracy, specificity, computational costs flexibility. 
+The general principle is to start with a robust, highly powerful but opaque model like support vectors and random forests to find the practical maximum for the models
+
+1. Find one with less variables and efficiency within one standard deviation of the above defined maximum.
+
+For example,
+if a model is created to predict two classes, sensitivity and specificity may
+be used to characterize the efficacy of models (see Chap. 11). If the data
+set includes more events than nonevents, the sensitivity can be estimated
+with greater precision than the specificity. With increased precision, there is
+a higher likelihood that models can be differentiated in terms of sensitivity
+than for specificity.
+
+###Measuremenets:
+
+    Sensitivity (also called the true positive rate, the recall, or probability of detection[1] in some fields) measures the proportion of positives that are correctly identified as such (e.g. the percentage of sick people who are correctly identified as having the condition).
+    Specificity (also called the true negative rate) measures the proportion of negatives that are correctly identified as such (e.g. the percentage of healthy people who are correctly identified as not having the condition).
+
+
+#Visualisation - Data summarisation 
+
+
+##Bivariate correation
+Bivariate plot between every pair of attributes
+
+```{r bivariate heatmap}
+#Template used:http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
+
+HeatMapTable <- TrainingSet[, c("ArMil","MeretCleared","KozkoltsegFtho","SzobaSzamCleared")]
+CorMat<-round(cor(HeatMapTable,use = "pairwise.complete"),2)
+head(CorMat)
+
+get_lower_tri<-function(CorMat){
+    CorMat[upper.tri(CorMat)] <- NA
+    return(CorMat)
+  }
+  get_upper_tri <- function(CorMat){
+    CorMat[lower.tri(CorMat)]<- NA
+    return(CorMat)
+  }
+  reorder_cormat <- function(cormat){
+  # Use correlation between variables as distance
+  dd <- as.dist((1-cormat)/2)
+  hc <- hclust(dd)
+  cormat <-cormat[hc$order, hc$order]
+  }
+
+ # Reorder the correlation matrix
+CorMat <- reorder_cormat(CorMat)
+upper_tri <- get_upper_tri(CorMat)
+melted_cormat <- melt(upper_tri, na.rm=TRUE)
+# Create a heatmap
+ggheatmap <- ggplot(melted_cormat, aes(Var2, Var1, fill = value))+
+ geom_tile(color = "white")+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-1,1), space = "Lab", 
+    name="Pearson\nCorrelation") +
+  theme_minimal()+ # minimal theme
+ theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+    size = 12, hjust = 1))+
+ coord_fixed()
+
+ggheatmap+
+    geom_text(aes(Var2, Var1, label = value), color = "black", size = 4) +
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.grid.major = element_blank(),
+  panel.border = element_blank(),
+  panel.background = element_blank(),
+  axis.ticks = element_blank(),
+  legend.justification = c(1, 0),
+  legend.position = c(0.6, 0.7),
+  legend.direction = "horizontal")+
+  guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
+                title.position = "top", title.hjust = 0.5))
+
+pKitchen<-ggplot(data = TrainingSet, mapping = aes(x = konyha, y = ArMil)) +
+geom_boxplot() +
+coord_cartesian(ylim = c(0, 100))
+
+pAppliances<-ggplot(data = TrainingSet, mapping = aes(x = Gepesitett, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pAlarm<-ggplot(data = TrainingSet, mapping = aes(x = Riaszto, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pWC<-ggplot(data = TrainingSet, mapping = aes(x = KulonWC, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pAC<-ggplot(data = TrainingSet, mapping = aes(x = Legkondicinalo, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+pCT<-ggplot(data = TrainingSet, mapping = aes(x = Tulajdonjogberletijog, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+
+pEmeletet<-ggplot(data = TrainingSet, mapping = aes(x = Emelet, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+
+
+
+pAccess<-ggplot(data = TrainingSet, mapping = aes(x = Akadalymentesitett, y = ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
+
+grid.arrange(pKitchen, pAppliances, pAlarm,pWC,pAC,pAccess,pCT,pEmeletet, ncol=3)
+```
+
+
+```{r visualisation}
+p5<-ggplot(data=TrainingSet)+
+  geom_bar(mapping = aes(x = Kerulet), fill='orange')
+
+p4<-ggplot(data=TrainingSet)+
+  geom_bar(mapping = aes(x = Kerulet, fill=Ingatlantipusa), position="dodge")
+
+
+p3<-ggplot(data=TrainingSet)+
+  geom_point(mapping = aes(x=MeretCleared, y=ArMil), position="jitter")+
+  geom_smooth(mapping = aes(x = MeretCleared, y = ArMil, group = Kerulet))
+
+
+p1<-ggplot(data=TrainingSet)+coord_cartesian(xlim = c(0, 150), ylim = c(0, 70))+
+  geom_point(mapping = aes(x=MeretCleared, y=ArMil, colour=Kerulet), position="jitter")+
+  geom_smooth(mapping = aes(x = MeretCleared, y = ArMil, group = Kerulet))
+
+KeruletSummery<-TrainingSet%>%
+  group_by(Kerulet)%>%
+  summarise(
+  ArMil=mean(ArMil, na.rm=TRUE),
+  n=n()
+  )
+p2<-ggplot(KeruletSummery, aes(Kerulet,ArMil)) + 
+  geom_point()
+
+grid.arrange(p1, p4, p3,p2,p5, ncol=2)
+```
+
+```{r DummyVars}
+#KeruletOnly
+TrainingSet$MC2<-TrainingSet$MeretCleared^2
+TrainingSet$MeretLog<-log(TrainingSet$MeretCleared)
+TrainingSet$LogMil<-log(TrainingSet$ArMil)
+TrainingSet$MeretExp<-exp(TrainingSet$MeretCleared)
+
+ArMil<-TrainingSet$ArMil
+simpleMod <- dummyVars(~MeretCleared + Kerulet+Kerulet:MeretCleared,
+                       data = TrainingSet,
+                       ## Remove the variable name from the
+                       ## column name
+                       levelsOnly = TRUE)
+WithInteract<-predict(simpleMod,TrainingSet)
+
+
+
+LM_model1<-train(y=ArMil,x=WithInteract, method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+
+#negyzetes taggal
+LM_modelquad<-train(ArMil~MeretCleared+MC2+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelquad)
+
+#negyzetes tagnelkul tisztan
+# RMSE      Rsquared   MAE     
+#  13.19065  0.7115969  8.563517
+LM_modelsimple<-train(ArMil~MeretCleared+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelsimple)
+
+LM_modelquadInteractio<-train(ArMil~MeretCleared:Kerulet+MC2:Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelquadInteractio)
+
+
+#withLOG
+
+#RMSE      Rsquared   MAE     
+#12.27934  0.7496871  7.691969
+
+LM_modelquadInteractionwithLog<-train(LogMil~MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelquadInteractionwithLog)
+
+LM_modelquadInteractionwithexp<-train(ArMil~MeretExp:Kerulet+MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelquadInteractionwithexp)
+
+
+
+````
+
+
+
+
+The caret package provides an excellent standardised form for administering multiple Machine Learning models. 
+
+```{r caret_LM_model_fitting}
+
+
+if(LocationData)
+{
+
+  #LM_model1  
+#RMSE      Rsquared   MAE     
+#12.41814  0.7445562  7.747817  
+LM_model1<-train(ArMil~MeretCleared*Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_model1)
+  
+LM_model9<-train(ArMil~MeretCleared+MeretCleared^2+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_model9)
+  
+  
+LM_model7<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_model7)
+
+#PredSet<-TrainingSet[,c("MeretCleared","Parkolas","Belmagassag","Felszobakszama","SzobaSzamCleared","Location1","Kerulet","Allapot","Ingatlantipusa","Futestipusa","Emelet")]
+
+PredSet<-TrainingSet[,c("MeretCleared","Parkolas","Belmagassag","Felszobakszama","SzobaSzamCleared","Kerulet","Allapot","Ingatlantipusa","Futestipusa","Emelet")]
+
+LM_model8<-train(ArMil~MeretCleared+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_model8)
+
+LM_nonform_1<- train(PredSet, TrainingSet$ArMil, method = "lm",  preProc = c("center", "scale"), trControl = trainControl(method = "cv"),na.action="na.exclude")
+
+
+
+
+}
+
+#svmRTuned <- train(PredSet, TrainingSet$ArMil, method = "svmRadial",  preProc = c("center", "scale"),  tuneLength = 14, trControl = trainControl(method = "cv"))
+
+#svm2<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Location1, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
+
+#svm2
+
+if(ZipData & DOsvm){
+svmNeighbour<-train(ArMil~MeretCleared, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
+svmNeighbour
+}
+ZipData<-FALSE
+if(ZipData){
+LM_Zipmodel1<-train(ArMil~MeretCleared+MeretCleared*neighborhood+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+neighborhood+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Zipmodel1)
+
+LM_Kermodel0<-train(ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel)
+
+
+LM_Kermodel1<-train(ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel)
+
+
+LM_Kermodel3<-train(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel3)
+
+#leave allapot behind
+LM_Kermodel4<-train(ArMil~MeretCleared*Kerulet+Allapot,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel4)
+
+LM_Kermodel4<-train(ArMil~MeretCleared*Kerulet+Allapot,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel4)
+
+LM_Kermodel5<-train(ArMil~MeretCleared*Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_Kermodel5)
+
+
+TrainingSet1<-TrainingSet%>%add_residuals(LM_Kermodel5)
+
+TrainingSet1<-TrainingSet1%>%add_predictions(LM_Kermodel5)
+xyplot(TrainingSet1$ArMil ~ TrainingSet1$pred, type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+
+xyplot(TrainingSet1$resid ~ TrainingSet1$pred, type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
+
+xyplot(TrainingSet1$resid ~ TrainingSet1$MeretCleared, type = c("p", "g"), xlab = "MeretCleared", ylab = "Residuals")
+#xyplot(TrainingSet$ArMil ~ predict(LM_Kermodel), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+
+#xyplot(resid(LM_Kermodel0) ~ predict(LM_Kermodel0), type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
+
+}
+
+
+rfModel0<-randomForest(ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
+print(rfModel0)
+
+rfModel1<-randomForest(ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
+ print(rfModel1)
+
+rfModel2<-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+ print(rfModel2)
+   
+rfModel3<-randomForest(ArMil~MeretCleared*(Kerulet)*Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+ print(rfModel3)
+ 
+rfModel4<-randomForest(ArMil~(MeretCleared+Kerulet)*Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+
+   
+rfModelFull <-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet+Parkolas,data=TrainingSet,ntrees = 100)
+print(rfModel)
+
+#MP5
+#modeltree neighbourhood
+#Correlation coefficient                  0.8764
+#Mean absolute error                      7.6151
+#Root mean squared error                 13.5288
+modelTree_neighborhood <- M5P(ArMil ~ MeretCleared+Parkolas+Allapot+Emelet+Kerulet+neighborhood, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree_neighborhood)
+PredSet<-TrainingSet[,c('MeretCleared','Kerulet','Parkolas')]
+
+modelTree_Kerulet<- M5P(ArMil ~ PredSet, data = TrainingSet, control = Weka_control(M = 10))
+
+
+#modeltree neighbourhood only 
+
+#Correlation coefficient                  0.8187
+#Mean absolute error                      8.8198
+#Root mean squared error                 16.0843
+
+modelTree_neighborhood_keruletOFF<- M5P(ArMil ~ MeretCleared+Parkolas+Allapot+Emelet+Location1, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree_neighborhood_keruletOFF)
+PredSet<-TrainingSet[,c('MeretCleared','Kerulet','Parkolas')]
+
+
+
+##12.404
+modelTree1 <- M5P(ArMil ~ MeretCleared+Allapot+Kerulet+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+
+summary(modelTree1)
+#12.11
+modelTree2 <- M5P(ArMil ~ MeretCleared+Allapot+Kerulet+Ingatlantipusa+konyha+Kertkapcsolatos+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree2)
+
+
+#quadratic situation doesn't change the data 
+modelTree3 <- M5P(ArMil ~ MeretCleared+MeretCleared^2+Allapot+Kerulet+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree3)
+# modelTree3 Root mean squared error                 11.8772 
+
+
+
+    
+
+modelTree4 <- M5P(ArMil ~ MeretCleared+Allapot+Location1+Ingatlantipusa+konyha+Kertkapcsolatos+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree4)
+
+#modelTree4
+#=== Summary ===
+#Correlation coefficient                  0.8961
+#Mean absolute error                      6.5724
+#Root mean squared error                 12.1009
+#Relative absolute error                 36.9149 %
+#Root relative squared error             44.3885 %
+#Total Number of Instances            22921 
+
+
+
+m5tree2 <- M5P(ArMil ~ log(MeretCleared)+Allapot+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+summary(m5tree2)
+#m5tree2
+#=== Summary === 
+#Correlation coefficient                  0.8108
+#Mean absolute error                      9.8242
+#Root mean squared error                 16.2119
+#Relative absolute error                 54.6564 %
+#Root relative squared error             58.6526 %
+#Total Number of Instances            27608  
+
+
+
+
+TrainingSet1<-TrainingSet%>%add_residuals(m5tree1)
+
+TrainingSet1<-TrainingSet1%>%add_predictions(m5tree1)
+
+
+#Tulajdonjogberletijog+Kerulet+neighborhood
+#rfModel <-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,ntrees = 1000)
+#print(rfModel)
+
+#fit<-train(ArMil~MeretCleared+Kerulet+Ingatlantipusa+Belmagassag+Tulajdonjogberletijog+Allapot+Futestipusa+LocStreet1,data=ModelData,method="lm",metric="RMSE",trControl=control,na.action = "na.omit")
+#print(fit)
+```
+
+
+
+
+
+In this section, I will start messing with the data manually. In the first part, I am going to build a linear regression model that uses the Kerulet(District) as its sole predictor.
+
+Linear Regression is an exceptionally handy  regression type because it's interpretation of its coefficients are obvious. Unfortunately, it suffers from two majos showcomings:
+1.It projects on a hyperplane, meaning meaning the unmodified function cannot map any curvature. 1.Secondly, LM treats outliers with equal weight.
+
+1. Outliers:
+Fitting of a linear regression model comes down minimimzing/maximizing the target metric (RMSE, R sq. for a the (X^t X)^-1 matrix. 
+
+The maximisation methods are
+1.RMSE 
+1.Sum of absolute errors
+1.HUbert'a method.(uses cutoff for mixing MSE and SAE)
+SAE and HUbert's is more robust to outliers.(=less influental obs.)
+
+2.To escape the hyperplane:
+To fit to non-linear curves transformations like quadratic, cubic, interactions, additional predictors could be used.
+
+The (X^t X)^-1 matrix is not unique when multicollinearity is present 2. the number of observation do not exceed the number of variables.
+
+Correlated predictors diminish the effects each other, and greatly increase the standard error.
+
+To combat this:
+1. Remove the variables showing high pairwise collinearity
+1. Use the collinearity inflation function to find instances where high covariance is shown between multiple vs 1 variable
+1. Use Principal Component Analysis to reduce the number of variables (take heed that PCA doesn't care about the inferrability or the response variable and thus, it  may diminsh the predictive power of the model.)
+1. Use PLS, ridge, lasso or  elastic net solutions to limit the number of variables in the model.
+
+
+Remember! to take into account the decrease of observations available for training due to resampling!
+
+
+Removing variables whose pairwise correlation is higher than a certain threshold let'say 0.9 
+
+Successful fitting means that theresiduals do not show any correlations with the predicted values.
+
+The PLS is a supervised dimension reduction technique that addresses the issue of lack of correlation witht the response variable by smultaneously maximising the covariance with the response  variable and the the variance of the predictors. 
+(weight, scoes loadings)
+
+
+PLS requires predictor to be scale and centered because it is drawn towards predictors with large variance.
+pls has 1 tuningparameters:no variables to retain.
+
+
+
+```{r model_building}
+model_Meret<- lm(ArMil ~ MeretCleared, data = TrainingSet)
+coef(model_Meret)
+grid <- TrainingSet %>%
+  data_grid(MeretCleared)
+grid<- grid %>% 
+  add_predictions(model_Meret)
+
+TrainingSet<-TrainingSet %>%
+  add_residuals(model_Meret)
+
+#as_tibble(AnalysisAdDetailList)
+
+P1<-ggplot(model_Meret, aes( MeretCleared)) + 
+  geom_point(aes(y = ArMil)) +
+  geom_line(aes(y = pred),data=grid, colour = "red", size = 1)
+P2<-ggplot(TrainingSet, aes(resid)) + 
+  geom_freqpoly(binwidth = 0.5)
+
+grid.arrange(P1, P2, ncol=2)
+
+```
+
+In order to be able to choose between these tests, a metric for their efficiency needs to be determined. 
+
+There are several metric for model evaluation, the general rule of thumb is that RMSE and R squared R squared for regressions and accuracy (and specificity), ROC(AUC), Cohen's Kappa and quasi R squared  for classification problems.
+
+rsquared reflects the portion of the explained variance which means R squared is depends on the initial variance in the model. It is possible, thus, to acquirefantsticly high R sq values with relatively large  RMSE metrics.
+
+```{r model_evaluation}
+#lm model
+TestSet$Pred_LM7 <- predict(LM_model7, TestSet)
+AnalysisAdDetailList$PredictedValue<-predict(LM_model7, AnalysisAdDetailList)
+
+
+#robust lm model
+#RLM_model<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=control,model=T)
+lmValues1 <- data.frame(obs = TestSet$ArMil, pred = TestSet$Pred_LM7)
+defaultSummary(lmValues1)
+
+#robust
+#rlmPCA<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="rlm",metric="RMSE",trControl=TRC_CV10,model=T)
+```
+
+```{r plotting}
+xyplot(TrainingSet$ArMil ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+xyplot(resid(LM_model7) ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
+```
+
+```{r improvement_MLresults}
+```
+
+Use bagging or boosting tto imrpove the well performing models. 
+```{r ensemble_methods}
+```
+
+
+Use bagging or boosting tto imrpove the well performing models. 
+```{r model_selection}
+
+```
+
+```{r Presentation}
+
+```
+
+#TODO
+
+íadd projectTable <- Done 
+ímegnézni, hogy miért nem lehet collapsolni a .rmd-t
+Rendes loggolás
+íreopened ADokat megnyitni. <-Done 
+Megnézni,hogy a faktorizálás során lehet-e kódolni a kerületet factorra
+íA lakás állapot NA-t stringgé alakítani (lásd guide)
+íKódolni a lakás állapotát faktorra <-done
+Kézi reportnál residualt gráfra
+íAz árnál binnelni
+íAz árnál az outliereket elengedni
+Model hatékonyságot a másik blogról lecsenni
+Ugyanezt LM után fákkal is megcsinálni
+
+Faktoring típusú lakások kiszűrése kézzel. 
+semi- supervised elemzés a faktoring típusú lakásokiszűrésére
+
+
+
+
+
+
