@@ -1,11 +1,13 @@
 ---
-title: "Jófogás ingatlan scraping process"
-output:
+title: "Jófogás ingatlan webscraping process"
+  output:
   html_document:
     df_print: paged
 editor_options:
   chunk_output_type: console
 ---
+
+#To be run daily.
 
 
 ```{r setup, echo=FALSE}
@@ -57,8 +59,8 @@ hirdetescrawler<-function(adurl,adAr=0){
   ValaszRecord<-cbind(ValaszRecord,SiteUrl)
   
   #add Price 
-  #price is a bit tricky to mine from this site because it has 2different values with 2 hidden.
-  #BUT! i could get the data from the search results page so until i find the will to do it properly, i will pass the argument on like this  all is good.
+  #price is a bit tricky to mine from this site because it has 3 different values with 2 of them being being hidden after rendering. 
+  #BUT! I could get the data from the search results page so until i find the will to do it properly, i will pass the argument on like this  all is good.
   Ar<-adAr
   names(Ar)<-"Ar"
   ValaszRecord<-cbind(ValaszRecord,Ar)
@@ -181,10 +183,10 @@ CleanUpLakásData<-function(hirdetéstábla){
   hirdetéstábla$Riaszto<-grepl("Riasztó",hirdetéstábla$Ingatlanfelszereltsege) 
   hirdetéstábla$Akadalymentesitett<-grepl("Akadálymentesített",hirdetéstábla$Ingatlanfelszereltsege)
 
-  
+ 
   #parsing the publish date. Unfortunately, the monthnames are in Hungarian locale, so we have to do an ol' R-switch-a-roo
   # the year is not listed, I wonder how the conversion work post jan.01. If it fails, I will have to grab the year from the querydate or pipe it though a is.month < current.month gate. We shall see soon enough! 
-  #update: If the  date is larger(later) t han the query time, the script decreases it  by one year. it will produce odd numbers for ads who had been active for more than a year.
+  #update: If the  date is larger(later) than the query time, the script decreases it  by one (year). This will produce odd numbers for ads who had been active for more than a year.
   #nota bene, according to documentation of as.date, the locale format is OS dependent, this script uses  the format for linux (openSuse leap 42.3) 
   lct<-Sys.setlocale("LC_TIME")
   Sys.setlocale("LC_TIME", "hu_HU.UTF-8")
@@ -265,7 +267,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
   rm(nyitunk)       #cleanup
   rm(totaltalálat)  #cleanup
   
-  #Define the threshold in respect of return number in order to be able to prevent/interrupt executions that might spam the website.
+  #Define the threshold in respect of the number of results in order to be able to prevent/interrupt executions that might spam the website.
   
   TooMany<-29000
   
@@ -326,35 +328,30 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
         következő_oldal_link<-html_attr(htmltempdata,"href")
         #Verify if we have  an URL ready 
         CheckUrl<-következő_oldal_link
-        if(length(CheckUrl)==0)
+        if(length(CheckUrl)==0) #if it doesnt exist, conclude that we are at the last page
         {
           cat("No new URL available")
           break
         }
         #randomised delay to avoid triggering spam protection 
 
-
         maszkido<-runif(1, 0.1, 2.23)
         cat(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " masodpercet\n"))
         Sys.sleep(maszkido)
-        #next repeat loop!
+        #next cycle!
         }
     
       if(nrow(masszlista)>0)
         {
-        #drop duplicate items (reranked entries during execution)
+        #drop duplicate items (due to reranking during execution)
         masszlista<-masszlista[!duplicated(masszlista[,2]),]
         masszlista$SessionID<-SessionID
         masszlista$ProjectName<-ProjectName
         
-        #save the data
-        #write.csv(masszlista, paste(SessionID,"_SUMM.csv",sep=''), row.names=FALSE)
-
         return(masszlista)
-        #save data
         }
       else
-      {cat("ERROR: the return table isemptyyyyyyy")
+      {cat("ERROR: the return table isempty")
         return("ERROR: The Return table is empty")}
     }
 }
@@ -365,7 +362,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
 closeAllConnections()
 
 #Projects
-UseExistingProject<-TRUE
+UseExistingProject<-TRUE #non predefined projects will be missing necessary filenames!
 #ProjectName<-"JofogasLakasokBpTest" 
 #ProjectName<-"sdhsdsddssd"
 ProjectName<-"JofogasLakasokBPFull"
@@ -380,14 +377,14 @@ ProjectAdDetailList<-NULL
 CheckUrl<-NULL
 
 if (!file.exists(TableOfProjectsFile)){
-  print("ERROR: Project name is not unambigous, breaking!")
+  print("ERROR: ProjectDataFile not found, exiting!")
 } else {
-  print("A file létezik!")
+  print("SUCCESS: ProjectDataFile found")
   TableOfProjects<-readRDS(file=TableOfProjectsFile)
 }
 
 if (!exists("TableOfProjects")){
-  print("ERROR: No Project Master File available!")
+  print("ERROR: Failed to load the Project Data File!")
 } else {
   if (!exists("ProjectName")){
   print("ERROR: No Project Name available!")
@@ -395,7 +392,7 @@ if (!exists("TableOfProjects")){
     print("Project Name available!")
     ProjectData<-TableOfProjects[TableOfProjects$ProjectName==ProjectName,]
     if (!exists("ProjectData")){
-      print("ERROR: Project could not be retrieved!")
+      print("ERROR: The Project record could not be retrieved!")
     } else{
       if(nrow(ProjectData)!=1){ 
         print("ERROR: Project name is not unambigous!")
@@ -431,7 +428,7 @@ if(UseExistingProject==FALSE){
   SessionTable<-merge(SessionTable,NewSession,all=TRUE) 
   saveRDS(SessionTable, file="SessionTable.Rda")
 
-#if we have an URL available, we should scratch it into our tracker, and begin interpreting it.
+#if we have an URL available, we should scratch it into our tracker then proceed to interpret it.
 if(!exists("CheckUrl")){
   print("ERROR: NO URL Available!") 
 } else {
@@ -441,9 +438,11 @@ if(!exists("CheckUrl")){
 #collecting the ad listings.
   ProjectCurrentAdList<-MapAds(CheckUrl = CheckUrl,SessionID = SessionID,ProjectName=ProjectName)
 #The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done. 
+#Update:The file names are stored and retrieved from the SessionTables instead
   ProjectCurrentAdListFile<-paste(SessionID,"_SUMM.Rda",sep='')
   saveRDS(ProjectCurrentAdList, file=ProjectCurrentAdListFile)
 
+  #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
   ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
   file.copy(ProjectAdListFile, paste(ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
   
@@ -474,12 +473,9 @@ saveRDS(SessionTable, file="SessionTable.Rda")
 print('Fin')
 ```
 
-```{r Feldolgozas}
-#merging the data with the basicdata table. The definitions should be moved to the top. 
+```{r Cleaning}
+#merging the data with the basic data table. The new definitions should be moved to the top. 
 #Load the cumulated dataset
-
-#ProjectCurrentAdListPattern<-"^JofogasLakasokBPFull\\_[0-9]{8}\\_[0-9]{4}[0-9A-Za-z]{2}\\_SUMM\\.Rda$"
-#ProjectCurrentAdListFile<-sort(list.files(pattern = ProjectCurrentAdListPattern),decreasing=TRUE)[1]
 
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 ProjectCurrentAdListFile<-SessionTable[SessionTable$SessionID==SessionID,"QueryAdList"]
@@ -492,13 +488,15 @@ ProjectAdDetailList<-readRDS(file=ProjectAdDetailListFile, refhook =NULL)
 rm(ProjectCurrentAdDetailList)
 
 #check the ads that have disappeared  
-#I am using the SQL query instead of normal data.frame operations because this kind of data is exactly the kind of data that is best stored in a proper RDBMS. Unfortunately, sqlite can't handle ouoter joins. 
+#I am using the SQL query instead of normal data.frame operations because this kind of data is exactly the kind that is best stored in a proper RDBMS. To my greatest chagrim, sqlite can't handle outer joins. 
+#it is time to close these ads:( #these are the queries from the current project that are completed ( we dont want to have an incomplete query to prematurely close ads, now do we? )
+
 
 AdsThatHaveDisappeared <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NULL EXCEPT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
 
 AdsCurrentThatHaveDisappearedFile<-paste(SessionID,"_AdsClosed.Rda",sep='')
 saveRDS(AdsThatHaveDisappeared, file=AdsCurrentThatHaveDisappearedFile)
-#it is time to close these ads:( #these are the queries from the current project that are completed ( we dont want to have an incomplete query to prematurely close ads, now do we? )
+
 
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   SessionTable[SessionTable$SessionID==SessionID,"ClosedAdNumber"]<-nrow(AdsThatHaveDisappeared)
@@ -507,6 +505,7 @@ saveRDS(AdsThatHaveDisappeared, file=AdsCurrentThatHaveDisappearedFile)
 
 if(nrow(AdsThatHaveDisappeared)>0){
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
+  #We are selecting the penultimate (previous) session of this Project
   ProjectSessions<- sqldf(sprintf('SELECT SessionID,ProjectName,StartTime,EndTime,Status FROM SessionTable WHERE ProjectName="%s" AND Status="Completed" order by StartTime DESC',ProjectName))
   saveRDS(SessionTable, file="SessionTable.Rda")
   
@@ -525,9 +524,8 @@ if(nrow(AdsThatHaveDisappeared)>0){
   } else {print("ERROR: SessionTAble has an issue with the SessionID")}
 } else {print("WARNING: No records to be closed")}
   
-#Checking if there are ads that need to be reopened. The entries which are collected, BUT have end datetime in the main Table. 
+#Checking if there are ads that need to be reopened. The entries which are scanned in the current session, BUT have non-null end time in the detailtable. 
 AdsThatHaveBeenReopened <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NOT NULL INTERSECT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
-
 
 AdsThatHaveBeenReopenedFile<-paste(SessionID,"_AdsOpened.Rda",sep='')
 saveRDS(AdsThatHaveBeenReopened, file=AdsThatHaveBeenReopenedFile)
@@ -539,7 +537,7 @@ saveRDS(SessionTable, file="SessionTable.Rda")
 
 ProjectAdDetailList[ProjectAdDetailList$SiteID %in% AdsThatHaveBeenReopened$SiteID,"PublishEndTime"]<-NA
 
-#producing the list of new ads compared to the previous list
+#producing the list of previously unseen or changed ads.
 rm(AdsToBeCollected)
 AdsToBeCollected <- sqldf('SELECT SiteID, Ar FROM ProjectCurrentAdList EXCEPT SELECT SiteID, Ar FROM ProjectAdDetailList')
 
@@ -583,7 +581,8 @@ if(nrow(AdsToBeCollected)>0){
         Sys.sleep(maszkido)
       }
   }
-  #check how many ads we failed to pull and run them again. Most error cases in the past were due to outages in the internet connection (VPN cough cough)
+  #check how many ads we failed to pull and run them again. Most error cases in the past were due to outages in the internet connection (VPN *cough cough*)
+  
   redotable<-ProjectCurrentAdDetailList[ProjectCurrentAdDetailList$QueryState!="No errors recorded" & ProjectCurrentAdDetailList$QueryState!="ERROR:  HTTP error 410.",]
   if (nrow(redotable)>0){
     AdsToBeCollected<-redotable
@@ -596,7 +595,7 @@ if(nrow(AdsToBeCollected)>0){
       print(paste('CL:',i,'/',lenfetch,' ',link,sep=''))
       hirdetesdata<-hirdetescrawler(adurl=link,adAr=Ar)
     
-      #sanity check for the collected 1-row data.frame
+      #sanity check for the collected data.frame
       if(!exists("ProjectCurrentAdDetailList")){
         ProjectCurrentAdDetailList<-hirdetesdata
       }else{
@@ -631,7 +630,7 @@ saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
 print("End of the line")
 ```
 
-
+# This section is responsible for typo corrections. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
 ```{r Locationwrangling}
 library(dplyr)
 library(ggmap)
