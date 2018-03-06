@@ -7,7 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-#To be run daily.
+#To be ran daily.
 
 
 ```{r setup, echo=FALSE}
@@ -444,7 +444,7 @@ if(!exists("CheckUrl")){
 
   #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
   ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
-  file.copy(ProjectAdListFile, paste(ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
+  file.copy(ProjectAdListFile, paste(getwd(),"/BackUp/",ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
   
   
   ProjectAdList<-merge(ProjectAdList,ProjectCurrentAdList,all=TRUE)
@@ -518,7 +518,7 @@ if(nrow(AdsThatHaveDisappeared)>0){
     PublishedBecsultEndtTime<-(CurrentSessionRecord$StartTime -     PreviousSessionRecord$StartTime)/2+PreviousSessionRecord$StartTime
     ProjectAdDetailList<-sqldf(c(sprintf('UPDATE ProjectAdDetailList SET PublishEndTime="%f" WHERE SiteID IN (SELECT SiteID FROM AdsThatHaveDisappeared)',PublishedBecsultEndtTime),'select * from main.ProjectAdDetailList'))
  
-    file.copy(ProjectAdDetailListFile, paste(ProjectAdDetailListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
+    file.copy(ProjectAdDetailListFile, paste(getwd(),"/BackUp/",ProjectAdDetailListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
     saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
   
   } else {print("ERROR: SessionTAble has an issue with the SessionID")}
@@ -633,9 +633,8 @@ print("End of the line")
 # This section is responsible for typo corrections. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
 ```{r Locationwrangling}
 library(dplyr)
-library(ggmap)
 library(stringi)
-library(XML)
+
 replaceMe<-function(df,from,to,level='LocStreet1')
 {
   df[tolower(trimws(df$LocStreet1))==tolower(from),'LocStreet1']<-to
@@ -669,7 +668,6 @@ TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList[c("MeretCleared"
 
 library(ggmap)
 library(mapproj)
-
 
 TestAdDetailList$LocStreet1<-gsub("\\d", "", TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-gsub("\\d", "", TestAdDetailList$LocStreet2) 
@@ -747,19 +745,9 @@ TestAdDetailList$LocStreet2<-trimws(gsub("[VIX]{0,5}[.]{0,1}[ ]{0,1}kerület[i]{
 TestAdDetailList$LocStreet1<-trimws(gsub("[0-9]{0,2}[.]{0,1}[ ]{0,1}kerület[i]{0,1}","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub("[0-9]{0,2}[.]{0,1}[ ]{0,1}kerület[i]{0,1}","",TestAdDetailList$LocStreet2,ignore.case = TRUE))
 
-#TestAdDetailList$LocStreet1<-trimws(gsub("Józsefváros","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("Józsefváros","",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-
-
 TestAdDetailList$LocStreet1<-trimws(gsub("- Ii/A","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 
-
-
-
-
 TestAdDetailList$LocStreet2<-gsub("- Ii/A","",TestAdDetailList$LocStreet2,ignore.case = TRUE)
-
 TestAdDetailList$LocStreet2<-gsub("/","",TestAdDetailList$LocStreet2,ignore.case = TRUE)
 
 TestAdDetailList$LocStreet1<-trimws(gsub("Józsefváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Corvinnegyed","Corvinnegyed",TestAdDetailList$LocStreet1,ignore.case = TRUE))
@@ -789,27 +777,11 @@ TestAdDetailList$LocStreet2<-trimws(gsub("Józsefváros[,]{0,1}[ ]{0,1}[-]{0,1}[
 TestAdDetailList$LocStreet1<-trimws(gsub("Józsefváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Palotanegyed","Palotanegyed",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub("Józsefváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Palotanegyed","Palotanegyed",TestAdDetailList$LocStreet2,ignore.case = TRUE))
 
-#TestAdDetailList$LocStreet1<-trimws(gsub("[Belső-|Külső-|Középső-]{0,1}[Józsefváros|Terézváros|Ferencváros|Erzsébetváros]{0,1}[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Nagykörúton Belül[i]{0,1}","Nagykörúton Belüli Terület",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet1<-trimws(gsub("[Belső-|Külső-|Középső-]{0,1}[Józsefváros|Terézváros|Ferencváros|Erzsébetváros]{0,1}[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Nagykörúton Kívül[i]{0,1}","Nagykörúton Kívüli Terület",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-
 TestAdDetailList$LocStreet1<-trimws(gsub("(Erzsébetváros|Józsefváros|Terézváros)?(\\, )?Nagykörúton Belül(i)?( Terület)?"," Nagykörúton Belüli Terület",TestAdDetailList$LocStreet1,ignore.case = TRUE,perl=TRUE))
 TestAdDetailList$LocStreet1<-trimws(gsub("(Erzsébetváros|Józsefváros|Terézváros)?(\\, )?Nagykörúton Kívül(i)?( Terület)?"," Nagykörúton Kívüli Terület",TestAdDetailList$LocStreet1,ignore.case = TRUE,perl=TRUE))
 
 TestAdDetailList$LocStreet2<-trimws(gsub("(Erzsébetváros|Józsefváros|Terézváros)?(\\, )?Nagykörúton Belül(i)?( Terület)?"," Nagykörúton Belüli Terület",TestAdDetailList$LocStreet2,ignore.case = TRUE,perl=TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub("(Erzsébetváros|Józsefváros|Terézváros)?(\\, )?Nagykörúton Kívül(i)?( Terület)?"," Nagykörúton Kívüli Terület",TestAdDetailList$LocStreet2,ignore.case = TRUE,perl=TRUE))
-
-
-
-#TestAdDetailList$LocStreet2<-trimws(gsub("[Belső-|Külső-|Középső-]{0,1}[Józsefváros|Terézváros|Ferencváros|Erzsébetváros]{0,1}[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Nagykörúton Belül[i]{0,1}","Nagykörúton Belüli Terület",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("[Belső-|Külső-|Középső-]{0,1}[Józsefváros|Terézváros|Ferencváros|Erzsébetváros]{0,1}[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Nagykörúton Kívül[i]{0,1}","Nagykörúton Kívüli Terület",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-
-#TestAdDetailList$LocStreet1<-trimws(gsub("Józsefváros, Nagykörúton Belül","Józsefváros Nagykörúton Belül",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("Józsefváros, Nagykörúton Belül","Józsefváros Nagykörúton Belül",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-#TestAdDetailList$LocStreet1<-trimws(gsub("Józsefváros, Nagykörúton Kívül","Józsefváros Nagykörúton Kívül",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("Józsefváros, Nagykörúton Kívül","Józsefváros Nagykörúton Kívül",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
 
 TestAdDetailList$LocStreet1<-trimws(gsub("Középső-Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Rehabilitációs Terület","Középső Ferencváros - Rehabilitációs Terület",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub("Középső-Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Rehabilitációs Terület","Középső Ferencváros - Rehabilitációs Terület",TestAdDetailList$LocStreet2,ignore.case = TRUE))
@@ -817,23 +789,8 @@ TestAdDetailList$LocStreet2<-trimws(gsub("Középső-Ferencváros[,]{0,1}[ ]{0,1
 TestAdDetailList$LocStreet1<-trimws(gsub("Középső-Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Malmok","Középső Ferencváros - Malmok",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub("Középső-Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}Malmok","Középső Ferencváros - Malmok",TestAdDetailList$LocStreet2,ignore.case = TRUE))
 
-
-#TestAdDetailList$LocStreet1<-trimws(gsub("Terézváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("Terézváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}","",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-#TestAdDetailList$LocStreet1<-trimws(gsub("Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
-#TestAdDetailList$LocStreet2<-trimws(gsub("Ferencváros[,]{0,1}[ ]{0,1}[-]{0,1}[ ]{0,1}","",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-
-
-
-
 TestAdDetailList$LocStreet1<-trimws(gsub(" Negyed","negyed",TestAdDetailList$LocStreet1,ignore.case = TRUE))
 TestAdDetailList$LocStreet2<-trimws(gsub(" Negyed","negyed",TestAdDetailList$LocStreet2,ignore.case = TRUE))
-
-
-
-#TestAdDetailList$LocStreet2<-gsub(".[ ]{0,1}kerület[i]{0,1}","",TestAdDetailList$LocStreet2,ignore.case = TRUE)
 
 TestAdDetailList$LocStreet1<-gsub("Utcza","Utca",TestAdDetailList$LocStreet1,ignore.case = TRUE)
 TestAdDetailList$LocStreet2<-gsub("Utcza","Utca",TestAdDetailList$LocStreet2,ignore.case = TRUE)
@@ -849,8 +806,6 @@ TestAdDetailList$LocStreet2<-trimws(gsub("  "," ",TestAdDetailList$LocStreet2,ig
 
 TestAdDetailList[is.na(TestAdDetailList$LocStreet1),'LocStreet1']<-"NotSpecified"
 TestAdDetailList[is.na(TestAdDetailList$LocStreet2),'LocStreet2']<-"NotSpecified"
-
-
 
 TestAdDetailList[TestAdDetailList$LocStreet1=="Nagykörúton Belüli Terület" & TestAdDetailList$Kerulet=="VII.",'LocStreet1']<-"Erzsébetváros Nagykörúton Belüli Terület"
 TestAdDetailList[TestAdDetailList$LocStreet2=="Nagykörúton Belüli Terület" & TestAdDetailList$Kerulet=="VII.",'LocStreet2']<-"Erzsébetváros Nagykörúton Belüli Terület"
@@ -931,25 +886,19 @@ TestAdDetailList<-replaceMe(TestAdDetailList,"Bp. Orczy Út","Orczy Út")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Budafoki","Budafoki Út")
 
 TestAdDetailList<-replaceMe(TestAdDetailList,"Budaörsi","Budaörsi Út")
-
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Bulcsú","Bulcsu Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Centenárium Lakótelep","Centenáriumi Lakótelep")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Colombus Utca","Columbus Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Corvin Krt","Corvin Körút")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Corvin-Negyed","Corvinnegyed")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csepel-Belváros","Csepel Belváros")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csikihegyek Utca","Csíkihegyek Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csillaghegyi Kertkapcsolatos","Csillaghegy")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csontváry Utca","Csontváry Kosztka Tivadar Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csontváry K. Tivadar","Csontváry Kosztka Tivadar Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csontváry Utca","Csontváry Kosztka Tivadar Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csontvary.k.t","Csontváry Kosztka Tivadar Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csut Utca","Csút Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Budaliget Ii/A","Budaliget")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Alacskai Út","Alacskai Úti Lakótelep")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Alacskai Lakótelep","Alacskai Úti Lakótelep")
@@ -967,9 +916,7 @@ TestAdDetailList<-replaceMe(TestAdDetailList,"Battyány","Batthyány Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Battyhány","Batthyány Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Bebo Károly Utca","Bebó Karoly Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Déri M","Déri Miksa Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Dessewffy Arisztid Utca","Dessewffy Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Diósárok","Diós Árok")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Diósárok Út","Diós Árok")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Diós Árok Út","Diós Árok")
@@ -988,23 +935,15 @@ TestAdDetailList<-replaceMe(TestAdDetailList,"Zugló Tallér Utca","Tallér Utca
 TestAdDetailList<-replaceMe(TestAdDetailList,"Zugligeti Út","Xii.ker Zugligeti Út")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Árpádfejedelem Útja","Árpád Fejedelem Útja")
 
-
-
-
 TestAdDetailList<-replaceMe(TestAdDetailList,", Teleki Utca","Teleki Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Arany János Utcai Lakótelep","Arany János Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Csarnoknegyed","Csarnoknegyed")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Józsefváros  Csarnoknegyed","Csarnoknegyed")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Józsefváros - Csarnoknegyed","Csarnoknegyed")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Belső-Erzsébetváros - Dohány Utca","Dohány Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Berda József U Utca","Berda József Utca")
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Belső- Ferencváros","Belső-Ferencváros")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Rózsa U. Utca","Rózsa Utca")
-
-
 TestAdDetailList<-replaceMe(TestAdDetailList,"Bauer Sandor","Bauer Sándor Utca")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Angyalföldi Utca","Angyalföldi Út")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Angyalföld - Lőportárdűlő","Angyalföld Lőportárdűlő")
@@ -1016,10 +955,8 @@ TestAdDetailList<-replaceMe(TestAdDetailList,"Józsefváros Losoncinegyed","Loso
 TestAdDetailList<-replaceMe(TestAdDetailList,"Losonczy Ter","Losonci Tér")
 TestAdDetailList<-replaceMe(TestAdDetailList,"Diplomata Negyed","Diplomatanegyed")
 
-
 TestAdDetailList[TestAdDetailList$LocStreet1=="",'LocStreet1']<-"NotSpecified"
 TestAdDetailList[TestAdDetailList$LocStreet2=="",'LocStreet2']<-"NotSpecified"
-
 
 
 LocationDF<-TestAdDetailList[,c('Kerulet','LocStreet1',"LocStreet2")]
@@ -1048,7 +985,6 @@ for(i in 1:length(LocationFreqs$utca)){
     LocationFreqs[i,'UtcaNum']<-LocationFreqs[LocationFreqs$Location==hello,'Total']}
 }
 
-LocationFreqs2<-LocationFreqs
 LocationDF<-TestAdDetailList[,c('Kerulet','LocStreet1',"LocStreet2")]
 LocColFirst<-LocationDF %>%count(LocStreet1)
 LocColSecond<-LocationDF%>%count(LocStreet2)
@@ -1069,9 +1005,7 @@ LocationFreqs$Total<-LocationFreqs$Col1Freq+LocationFreqs$Col2Freq
 
 LocationDF<-TestAdDetailList[,c('Kerulet','LocStreet1',"LocStreet2")]
 
-
 LocationFreqs$drop<-ifelse(LocationFreqs$Total<7,TRUE,FALSE)
-
 
 LocationFreqsDrop<-LocationFreqs[!LocationFreqs$drop,]
 
@@ -1095,15 +1029,9 @@ LocationTable<-TestAdDetailList[,c('SiteID','Location1','Location2')]
 LocationTable[LocationTable$Location1=="NotSpecified",'Location1']<-NA
 LocationTable[LocationTable$Location2=="NotSpecified",'Location2']<-NA
 
-
 ProjectAdDetailList<-merge(ProjectAdDetailList,LocationTable,by.x="SiteID",by.y="SiteID",all.x=TRUE)
 
-#ProjectAdDetailList[ProjectAdDetailList$Location1=="NotSpecified","Location1"]<-NA
-#ProjectAdDetailList[ProjectAdDetailList$Location2=="NotSpecified","Location2"]<-NA
-
-
 saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
-
 ```
 
 
@@ -1217,7 +1145,9 @@ for(b in 1:length(CoordinateCurrentTable$Latitude)){
         }
       }
     }else{
-      saveRDS(CoordinateCurrentTable,file=paste("backup_",CoordinateTableFile))
+      saveRDS(CoordinateCurrentTable,file=paste(getwd(),"/BackUp/",CoordinateCurrentTable,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
+      
+      
       stop("Not enough observations")
     }
   }

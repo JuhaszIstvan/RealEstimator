@@ -1,5 +1,5 @@
 ---
-title: "Analysis of the real estate market of Hungary"
+title: "Analysis of the Hungarian real estate market"
 output:
   html_document:
     df_print: kable
