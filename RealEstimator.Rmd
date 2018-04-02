@@ -7,7 +7,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-#To be ran daily.
+#To be run daily.
 
 
 ```{r setup, echo=FALSE}
@@ -306,16 +306,25 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
            {
             print(paste("ERROR resolving link",CheckUrl,"Breaking execution"))
             break}
-        if(!exists("masszlista")){
-          masszlista<-hirdeteslista(webpage)
-        }else{
-          masszlista<-rbind(masszlista,hirdeteslista(webpage))    
-        }
-        
-        #this is where we zone in on the link to the last page. this isnt even being used for anything yet.
+            TempWebPage<-NULL
+      TempWebPage = tryCatch({hirdeteslista(webpage)
+        }, warning = function(warning_message) {
+        #print(warning_message)
+      }, error = function(error_message) {
+        #print(paste("error",error_message))
+        SaveTheWebPage<-TempWebPage
+      } 
+      )
+      if(exists("TempWebPage")){
+          if(!exists("masszlista")){
+          masszlista<-TempWebPage
+          }else{
+            masszlista<-rbind(masszlista,TempWebPage)    
+          }
+         }
+#this is where we zone in on the link to the last page. this isnt even being used for anything yet.
         htmltempdata <- NULL
         htmltempdata <- html_nodes(webpage,'.ad-list-pager-item-last')
-        
         if (!is.null(htmltempdata)){ #if it doesnt exist, conclude that we are at the last page
           utolsó_oldal_link<-html_attr(htmltempdata,"href")
         } else {
@@ -336,7 +345,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
         #randomised delay to avoid triggering spam protection 
 
         maszkido<-runif(1, 0.1, 2.23)
-        cat(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " masodpercet\n"))
+        cat(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " second(s)\n"))
         Sys.sleep(maszkido)
         #next cycle!
         }
@@ -362,9 +371,9 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
 closeAllConnections()
 
 #Projects
-UseExistingProject<-TRUE #non predefined projects will be missing necessary filenames!
+UseExistingProject<-TRUE #non-predefined projects will be missing necessary filenames!
 #ProjectName<-"JofogasLakasokBpTest" 
-#ProjectName<-"sdhsdsddssd"
+
 ProjectName<-"JofogasLakasokBPFull"
 
 TableOfProjectsFile<-"rest_TableOfProjects.Rda"
@@ -439,13 +448,12 @@ if(!exists("CheckUrl")){
   ProjectCurrentAdList<-MapAds(CheckUrl = CheckUrl,SessionID = SessionID,ProjectName=ProjectName)
 #The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done. 
 #Update:The file names are stored and retrieved from the SessionTables instead
-  ProjectCurrentAdListFile<-paste(SessionID,"_SUMM.Rda",sep='')
+  ProjectCurrentAdListFile<-paste(getws(),"/BackUp/",SessionID,"_SUMM.Rda",sep='')
   saveRDS(ProjectCurrentAdList, file=ProjectCurrentAdListFile)
 
   #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
   ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
   file.copy(ProjectAdListFile, paste(getwd(),"/BackUp/",ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
-  
   
   ProjectAdList<-merge(ProjectAdList,ProjectCurrentAdList,all=TRUE)
   saveRDS(ProjectAdList, file=ProjectAdListFile)
@@ -470,10 +478,10 @@ if (!exists("ProjectCurrentAdList")){
 print(paste("Execution time:",time.taken))
 saveRDS(SessionTable, file="SessionTable.Rda")
   
-print('Fin')
+print('The AD mappings have been finished.')
 ```
 
-```{r Cleaning}
+```{r AdDetailCollection}
 #merging the data with the basic data table. The new definitions should be moved to the top. 
 #Load the cumulated dataset
 
@@ -485,8 +493,8 @@ ProjectCurrentAdList<-readRDS(file=ProjectCurrentAdListFile, refhook =NULL)
 
 ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
 ProjectAdDetailList<-readRDS(file=ProjectAdDetailListFile, refhook =NULL)
-rm(ProjectCurrentAdDetailList)
 
+if(exists("ProjectCurrentAdDetailList")){rm(ProjectCurrentAdDetailList)}
 #check the ads that have disappeared  
 #I am using the SQL query instead of normal data.frame operations because this kind of data is exactly the kind that is best stored in a proper RDBMS. To my greatest chagrim, sqlite can't handle outer joins. 
 #it is time to close these ads:( #these are the queries from the current project that are completed ( we dont want to have an incomplete query to prematurely close ads, now do we? )
@@ -494,9 +502,8 @@ rm(ProjectCurrentAdDetailList)
 
 AdsThatHaveDisappeared <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NULL EXCEPT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
 
-AdsCurrentThatHaveDisappearedFile<-paste(SessionID,"_AdsClosed.Rda",sep='')
+AdsCurrentThatHaveDisappearedFile<-paste(getwd(),"/BackUp/",SessionID,"_AdsClosed.Rda",sep='')
 saveRDS(AdsThatHaveDisappeared, file=AdsCurrentThatHaveDisappearedFile)
-
 
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   SessionTable[SessionTable$SessionID==SessionID,"ClosedAdNumber"]<-nrow(AdsThatHaveDisappeared)
@@ -527,7 +534,9 @@ if(nrow(AdsThatHaveDisappeared)>0){
 #Checking if there are ads that need to be reopened. The entries which are scanned in the current session, BUT have non-null end time in the detailtable. 
 AdsThatHaveBeenReopened <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NOT NULL INTERSECT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
 
-AdsThatHaveBeenReopenedFile<-paste(SessionID,"_AdsOpened.Rda",sep='')
+
+
+AdsThatHaveBeenReopenedFile<-paste(getwd(),"/BackUp/",SessionID,"_AdsOpened.Rda",sep='')
 saveRDS(AdsThatHaveBeenReopened, file=AdsThatHaveBeenReopenedFile)
 
 
@@ -544,7 +553,7 @@ AdsToBeCollected <- sqldf('SELECT SiteID, Ar FROM ProjectCurrentAdList EXCEPT SE
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 SessionTable[SessionTable$SessionID==SessionID,"NewAdNumber"]<-nrow(AdsToBeCollected)
 saveRDS(SessionTable, file="SessionTable.Rda")
-ProjectCurrentAdDetailListFile<-paste("Detailedhirdetes_",format(Sys.time(),"%Y_%m_%d_%H%M%S"),".Rda",sep='')
+ProjectCurrentAdDetailListFile<-paste(getwd(),"/BackUp","Detailedhirdetes_",format(Sys.time(),"%Y_%m_%d_%H%M%S"),".Rda",sep='')
 
 if(nrow(AdsToBeCollected)>0){
   #Fetching the links to these Ads
@@ -1035,16 +1044,18 @@ saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
 ```
 
 
-
-##coordinatewrangling
-```{r reverse geocoding}
+#coordinatewrangling
+```{r reverse_geocoding}
+cat("Beginning the execution of the chunk: Reverse_Geocoding")
 library(dplyr)
 library(ggmap)
 library(stringi)
 library(XML)
 CoordinateTableFile<-"CoordinateTable.Rda"
-CoordinateTable<-readRDS(CoordinateTableFile)
 
+file.copy(CoordinateTableFile, paste(getwd(),"/BackUp/",CoordinateTableFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
+
+CoordinateTable<-readRDS(CoordinateTableFile)
 
 ProjectName="JofogasLakasokBPFull"
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
@@ -1175,5 +1186,7 @@ ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District==
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="Missing",'District']<-NA
 
 saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
-write.csv(ProjectAdDetailList,file="ads.csv",fileEncoding = "UTF-8")
+
+#Ditching the large data file.
+if(exists("ProjectAdList")){rm(ProjectAdList)}
 ```

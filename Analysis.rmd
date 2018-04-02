@@ -113,10 +113,8 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Quer
 #TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order("QueryTime"),decreasing=TRUE), ]
 AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
 AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","Description","Kerulet")]),]
-
 ```
 
-After finishing the above, the dataset looks much much better now with `r nrow(n_occur[n_occur$Freq > 1,])` number of dupicates. 
 
 
 
@@ -137,10 +135,6 @@ summary(AnalysisAdDetailList)
 Most variables are categorical or logical. There are three time columns: the the publish time of the ad, the calculated end time of the ad and the query time. As for numerical data, we have the commonidium charges, the independent variable, price (Ár) and the floorsize. 
 
 Some models benefit greatly from the standardisation of numerical variables. 
-
-1.Skewedness could be addressed by Box-Cox transfomation
-1.Outliers could be transformed by mapping tham on a sphare(look it up)
-1. bye
 
 
 
@@ -534,8 +528,88 @@ AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvaria
 
 
 ```{r dropping_columns}
-AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryTime","QueryState"))]
+AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryTime","QueryState", "Havikozoskoltseg"))]
 ```
+
+
+After finishing the data cleaning, we are now able to use these variables to find fuzzyduplicates, or near matches using compare.linkage and recordlinkage() packages. The following experimenting relies on information gathered from the article by the package authors( available here:https://journal.r-project.org/archive/2010-2/RJournal_2010-2_Sariyar+Borg.pdf)
+
+There are two broad approaches for identifying duplicates:stochastic methods and methods relying on machine learning. The former of which relies on finding the parameter weight threshold where the likeklihood of 
+a successful classification is maximum. 
+
+Let's load the library and generate a simple control table for comparison.
+```{r RecordLinkage}
+library(RecordLinkage)
+#test population
+DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$SzobaSzamCleared=="3" & AnalysisAdDetailList$Kerulet=="XVIII." & AnalysisAdDetailList$MeretCleared==74,]
+
+#larger DedupeTestSet
+DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet=="XVIII.",]
+
+  CompareBy<-c("SiteID","Description","MeretCleared","Kerulet","EmeletOrg","ArMil")
+  Blockfields<-c("Kerulet","MeretCleared","EmeletOrg")
+  ExcludeTheseFields<-c("SiteID")
+DedupeTestLimited<-DedupeTestSet[,CompareBy]
+#DedupeFullLimited<-AnalysisAdDetailList[,CompareBy]
+
+
+
+
+
+#calculating the number comparison pairs
+
+Estimation <- AnalysisAdDetailList %>%
+  group_by_at(vars(one_of(Blockfields))) %>%
+  summarize(n = n(),npairs=n*(n-1)/2)
+
+sum(Estimation$npairs)
+
+#back to business
+
+#adding fuzzy comparison, the numbers seem to be working out well.
+#rpairs <- compare.dedup(DedupeTestShort, blockfld = c("Kerulet","MeretCleared"))
+ #the default fuzzyrpairs is jarowinkler, 
+
+#the strcmp doesn't have to fuzzycompare anything. column position supplied.
+fuzzyrpairsDefault<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp = which(colnames(DedupeTestLimited) %in% c("Description")), exclude=ExcludeTheseFields)
+
+ #the alternative is levenshteinSim
+#fuzzyrpairslevenshteinSim<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp=TRUE, strcmpfun =  levenshteinSim)
+
+#the the stochastic method ( sans underlying stochastic modell, use manual fixing)
+fuzzyrpairsDefault$pairs
+
+emWeightedPairs<-emWeights(fuzzyrpairsDefault)
+
+#With EPI
+#epiWeightedPairs<-epiWeights(fuzzyrpairsDefault, e = 0.05)
+#epiresult <- epiClassify(fuzzyrpairsDefault, 0.55)
+
+#Eith EM
+emResult <- emClassify(emWeightedPairs)
+summary(emResult)
+#determine the weight of cutoff for matches and non matches using getParetoThreshold. The overlapping section is continuous and linear
+
+Adlinks<-getPairs(emResult,show="links", single.rows=TRUE)
+#Show the matching records
+AdPairs<-Adlinks[,c("SiteID.1","SiteID.2")]
+
+# consolidating the table 
+
+for(index in 1:nrow(AdPairs)){
+  replace(Adpairs$SiteID.1, Adpairs$SiteID.1==Adpairs[index,"SiteID.2"], Adpairs[index,"SiteID.1"])
+  Adpairs[index,"SiteID.2"]
+  
+  
+  
+  
+}
+#redoing this on entire dataset
+#DedupeTestLong<-AnalysisAdDetailList[,CompareBy]
+#LongfuzzyrpairsDefault<-compare.dedup(DedupeTestLong, blockfld =c("Kerulet","MeretCleared"), strcmp = TRUE, )
+```
+
+
 
 #Data Splitting
 
