@@ -1,32 +1,24 @@
----
-title: "Jófogás ingatlan webscraping process"
-  output:
-  html_document:
-    df_print: paged
-editor_options:
-  chunk_output_type: console
----
+# impressum ---------------------------------------------------------------
+#"Jófogás ingatlan webscraping process"
+#written by: Istvan Juhasz
+#contact: https://github.com/JuhaszIstvan  
+#to be executred daily.
 
-#To be run daily.
+
+# setup -------------------------------------------------------------------
 
 #In preparing to run the code on a (virtual) server, the file format needs to be changed to simple.R script. .R scripts do not automatically generate a new environment like .rmd-s, thus:
 rm(list=ls())
+closeAllConnections()
 
+libraries<-c("rvest","stringi","data.table","sqldf","lubridate","dplyr")
+for(index in 1:length(libraries)){
+   lapply(libraries, require, character.only = TRUE)
+}
 
-```{r setup, echo=FALSE}
-rm(list=ls())
-library(rvest)
-library(stringi)
-library(data.table)
-library(sqldf)
-library(lubridate)
-library(randomForest)
-library(dplyr)
-```
+# Functions ---------------------------------------------------------------
 
-```{r UDFs}
-GenerateURL<-function(siteurl='https://ingatlan.jofogas.hu/',Sellbuy='s',Commodity='lakas',City="budapest")
-{
+GenerateURL<-function(siteurl='https://ingatlan.jofogas.hu/',Sellbuy='s',Commodity='lakas',City="budapest"){
   if (exists("Minsize") & exists("Maxsize")){
     if(Maxsize<Minsize)
     {
@@ -250,9 +242,8 @@ hirdeteslista <- function(weblap){
   return(kistábla)
 }
 
-MapAds<-function(CheckUrl,SessionID,ProjectName)
-{
-  webpage <- read_html(CheckUrl)
+MapAds<-function(CheckUrl,SessionID,ProjectName){
+    webpage <- read_html(CheckUrl)
   
   ##retrieving the number of total hits
   htmltempdata <- html_nodes(webpage,'div.re-all-count')
@@ -369,18 +360,16 @@ MapAds<-function(CheckUrl,SessionID,ProjectName)
         return("ERROR: The Return table is empty")}
     }
 }
-```
 
-```{r execution, echo=FALSE}
-#cleanup 
-closeAllConnections()
+# Initial_Scan ------------------------------------------------------------
 
 #Projects
-UseExistingProject<-TRUE #non-predefined projects will be missing necessary filenames!
+UseExistingProject<-TRUE #non-predefined projects will be missing necessary filenames and FAIL!
 #ProjectName<-"JofogasLakasokBpTest" 
 
 ProjectName<-"JofogasLakasokBPFull"
 
+#the below NULL-ifications are technically redundant.
 TableOfProjectsFile<-"rest_TableOfProjects.Rda"
 TableOfProjects<-NULL
 ProjectData<-NULL
@@ -453,7 +442,7 @@ if(!exists("CheckUrl")){
   ProjectCurrentAdList<-MapAds(CheckUrl = CheckUrl,SessionID = SessionID,ProjectName=ProjectName)
 #The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done. 
 #Update:The file names are stored and retrieved from the SessionTables instead
-  ProjectCurrentAdListFile<-paste(getws(),"/BackUp/",SessionID,"_SUMM.Rda",sep='')
+  ProjectCurrentAdListFile<-paste(getwd(),"/BackUp/",SessionID,"_SUMM.Rda",sep='')
   saveRDS(ProjectCurrentAdList, file=ProjectCurrentAdListFile)
 
   #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
@@ -484,18 +473,16 @@ print(paste("Execution time:",time.taken))
 saveRDS(SessionTable, file="SessionTable.Rda")
   
 print('The AD mappings have been finished.')
-```
 
-```{r AdDetailCollection}
+# Collecting_the_new_or_changed_ads ---------------------------------------
+
 #merging the data with the basic data table. The new definitions should be moved to the top. 
 #Load the cumulated dataset
 
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 ProjectCurrentAdListFile<-SessionTable[SessionTable$SessionID==SessionID,"QueryAdList"]
 saveRDS(SessionTable, file="SessionTable.Rda")
-
 ProjectCurrentAdList<-readRDS(file=ProjectCurrentAdListFile, refhook =NULL)
-
 ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
 ProjectAdDetailList<-readRDS(file=ProjectAdDetailListFile, refhook =NULL)
 
@@ -506,10 +493,8 @@ if(exists("ProjectCurrentAdDetailList")){rm(ProjectCurrentAdDetailList)}
 
 
 AdsThatHaveDisappeared <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NULL EXCEPT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
-
 AdsCurrentThatHaveDisappearedFile<-paste(getwd(),"/BackUp/",SessionID,"_AdsClosed.Rda",sep='')
 saveRDS(AdsThatHaveDisappeared, file=AdsCurrentThatHaveDisappearedFile)
-
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   SessionTable[SessionTable$SessionID==SessionID,"ClosedAdNumber"]<-nrow(AdsThatHaveDisappeared)
   SessionTable[SessionTable$SessionID==SessionID,"ClosedAdFile"]<-AdsCurrentThatHaveDisappearedFile
@@ -552,7 +537,7 @@ saveRDS(SessionTable, file="SessionTable.Rda")
 ProjectAdDetailList[ProjectAdDetailList$SiteID %in% AdsThatHaveBeenReopened$SiteID,"PublishEndTime"]<-NA
 
 #producing the list of previously unseen or changed ads.
-rm(AdsToBeCollected)
+if(exists("AdsToBeCollected")){rm(AdsToBeCollected)}
 AdsToBeCollected <- sqldf('SELECT SiteID, Ar FROM ProjectCurrentAdList EXCEPT SELECT SiteID, Ar FROM ProjectAdDetailList')
 
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
@@ -642,22 +627,20 @@ saveRDS(SessionTable, file="SessionTable.Rda")
 saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
 
 print("End of the line")
-```
 
+
+# Locationwrangling -------------------------------------------------------
 # This section is responsible for typo corrections. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
-```{r Locationwrangling}
+
 library(dplyr)
 library(stringi)
 
-replaceMe<-function(df,from,to,level='LocStreet1')
-{
+replaceMe<-function(df,from,to,level='LocStreet1'){
   df[tolower(trimws(df$LocStreet1))==tolower(from),'LocStreet1']<-to
   df[tolower(trimws(df$LocStreet2))==tolower(from),'LocStreet2']<-to
   return(df)
 }
-  
-  
-  
+ 
 ProjectName="JofogasLakasokBPFull"
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 TableOfProjectsFile<-"rest_TableOfProjects.Rda"
@@ -675,8 +658,6 @@ ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
 TestAdDetailList<-ProjectAdDetailList
 
 TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order(QueryTime,decreasing = T)),]
-
-#TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order("QueryTime"),decreasing=TRUE), ]
 TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList$SiteID),]
 TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList[c("MeretCleared","Description","Kerulet")]),]
 
@@ -1046,11 +1027,10 @@ LocationTable[LocationTable$Location2=="NotSpecified",'Location2']<-NA
 ProjectAdDetailList<-merge(ProjectAdDetailList,LocationTable,by.x="SiteID",by.y="SiteID",all.x=TRUE)
 
 saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
-```
 
 
-#coordinatewrangling
-```{r reverse_geocoding}
+# Reverse_Geocoding -------------------------------------------------------
+
 cat("Beginning the execution of the chunk: Reverse_Geocoding")
 library(dplyr)
 library(ggmap)
@@ -1194,4 +1174,5 @@ saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
 
 #Ditching the large data file.
 if(exists("ProjectAdList")){rm(ProjectAdList)}
-```
+
+# Producing the report ----------------------------------------------------
