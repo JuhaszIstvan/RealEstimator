@@ -5,7 +5,6 @@ The RealEstimator is webscraper written in R for the purposes of scraping real e
 
 The script was written with generalisation in mind.
 
-
 Tested on: OpenSUSE Leap 42.3 and OpenSUSE Tumbleweed 20180410
 
 Please note that the rJava package is the distro packaged version because the CRAN package has issues with the java on these distros.
@@ -23,8 +22,6 @@ contact: https://github.com/JuhaszIstvan
 
 #Data Structure
 
-
-
 ## General files
 1.The script uses a master project table to record the various file names and access paths associated with each project.  
 
@@ -40,9 +37,9 @@ Each project has at least 2 tables
 2) AdDetailList
   A table that contains the additional columns of each record.
   
-# Execution
-## Realestimator script 
 
+# Execution
+## Realestimator 
 
 The script was originally written in several files as an R Studio markdown workbook, which guaranteed a clean environment with all outputs dumped into the output/backup directories.
 
@@ -63,6 +60,5 @@ The ads have two free-text fields (LocStreet1 and LocStreet2) that are occasiona
 
 ## Analysis.rmd
 
+
 This script is written in an R markdown workbook format. It is purpose is reproducibly process the various data cleaning operations. It contains multiple mutually exclusive Machine learning fittings, Record Linkage attempts that makes full execution impossible!
-
-
