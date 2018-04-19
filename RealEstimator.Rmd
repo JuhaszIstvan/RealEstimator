@@ -17,6 +17,7 @@ library(data.table)
 library(sqldf)
 library(lubridate)
 library(randomForest)
+library(dplyr)
 ```
 
 ```{r UDFs}
@@ -553,7 +554,7 @@ AdsToBeCollected <- sqldf('SELECT SiteID, Ar FROM ProjectCurrentAdList EXCEPT SE
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 SessionTable[SessionTable$SessionID==SessionID,"NewAdNumber"]<-nrow(AdsToBeCollected)
 saveRDS(SessionTable, file="SessionTable.Rda")
-ProjectCurrentAdDetailListFile<-paste(getwd(),"/BackUp","Detailedhirdetes_",format(Sys.time(),"%Y_%m_%d_%H%M%S"),".Rda",sep='')
+ProjectCurrentAdDetailListFile<-paste(getwd(),"/BackUp/","Detailedhirdetes_",format(Sys.time(),"%Y_%m_%d_%H%M%S"),".Rda",sep='')
 
 if(nrow(AdsToBeCollected)>0){
   #Fetching the links to these Ads
