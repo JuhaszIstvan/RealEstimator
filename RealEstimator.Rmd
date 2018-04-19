@@ -9,8 +9,12 @@ editor_options:
 
 #To be run daily.
 
+#In preparing to run the code on a (virtual) server, the file format needs to be changed to simple.R script. .R scripts do not automatically generate a new environment like .rmd-s, thus:
+rm(list=ls())
+
 
 ```{r setup, echo=FALSE}
+rm(list=ls())
 library(rvest)
 library(stringi)
 library(data.table)
