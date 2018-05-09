@@ -55,14 +55,23 @@ JofogasLakasokBPFull_20180101_23295P
 library(caret)
 library(Amelia)
 library(sqldf)
-library(tidyverse)
+#library(tidyverse)
 library(dplyr)
 library(reshape2)
 library(randomForest)
 library(gridExtra)
 library(modelr)
 library(stringi)
-library(RWeka)
+
+#library(RWeka)
+
+
+libraries<-c("caret","sqldf","Amelia","sqldf","dplyr","reshape2","randomForest","gridExtra","modelr","stringi")
+for(index in 1:length(libraries)){
+   lapply(libraries, require, character.only = TRUE)
+}
+
+
 set.seed(7)
 LocationData=FALSE
 ZipData=TRUE
@@ -186,8 +195,6 @@ head(AnalysisAdDetailList[,c("SiteID","SiteUrl","MeretCleared")])
 AnalysisAdDetailList$PicNums<-as.character(as.numeric(AnalysisAdDetailList$PicNums))
 
 ```
-
-
 
 
 Fortunately the top 3 are development areas. For now, I am going to clip these ads off.
@@ -546,18 +553,13 @@ DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$SzobaSzamCleared=="3" &
 #larger DedupeTestSet
 DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet=="XVIII.",]
 
-  CompareBy<-c("SiteID","Description","MeretCleared","Kerulet","EmeletOrg","ArMil")
+  CompareBy<-c("SiteID","Description","MeretCleared","Kerulet","EmeletOrg","ArMil","PublishedTimeCleared")
   Blockfields<-c("Kerulet","MeretCleared","EmeletOrg")
-  ExcludeTheseFields<-c("SiteID")
+  ExcludeTheseFields<-c("SiteID","PublishedTimeCleared")
 DedupeTestLimited<-DedupeTestSet[,CompareBy]
 #DedupeFullLimited<-AnalysisAdDetailList[,CompareBy]
 
-
-
-
-
 #calculating the number comparison pairs
-
 Estimation <- AnalysisAdDetailList %>%
   group_by_at(vars(one_of(Blockfields))) %>%
   summarize(n = n(),npairs=n*(n-1)/2)
@@ -571,7 +573,7 @@ sum(Estimation$npairs)
  #the default fuzzyrpairs is jarowinkler, 
 
 #the strcmp doesn't have to fuzzycompare anything. column position supplied.
-fuzzyrpairsDefault<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp = which(colnames(DedupeTestLimited) %in% c("Description")), exclude=ExcludeTheseFields)
+fuzzyrpairsDefault<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp = which(colnames(DedupeTestLimited) %in% c("Description")), exclude=which(colnames(DedupeTestLimited) %in% ExcludeTheseFields))
 
  #the alternative is levenshteinSim
 #fuzzyrpairslevenshteinSim<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp=TRUE, strcmpfun =  levenshteinSim)
@@ -592,18 +594,81 @@ summary(emResult)
 
 Adlinks<-getPairs(emResult,show="links", single.rows=TRUE)
 #Show the matching records
+AllPairs<-getPairs(emResult, single.rows=TRUE)
+
+#The records are listed in the getPairs function returned us the matches in an Rj1:Rj2 format where Rj1 and Rj2 are two records.
+#we need to group multiple records together. TThe simpler way is just replacing items until the vectors are normalised.
+#The second option borrows the ideas from network studies. 'Unmelting', or using dplyr's terminology (gathering)(check it!) the Aj:Rj2 nx2 data frames into a matrix where the values store the status or value of the link between the row's  and the column's agent, we will get a table that is referred to the 'adjacency matrix'. The adjacency matrices have a very interesting attribute: While it is identical form shows the one step connections bertween two items, its square ( A * A ) gives us the 2 step distance, it's cube the 3 step distance and so on. ASsuming that we define a cutoff distance of 2 steps, then summng and normaling them gives us whether connection exists between two items: sign(A + A*A) 
+
+#Demelting
+test<-dcast(AllPairs, formula = SiteID.1 ~ SiteID.2, value="Weight", fill=0)
+test_backsave<-test
+if(!is.null(test$SiteID.1))
+{
+ row.names(test)<-test$SiteID.1
+ test$SiteID.1<-NULL
+}
+#the two step relations require the adjacency matrix to be squared. This requires a) matrices and b) need the weights need to be normalised onto to a [0-1] scale vbecasue squaring these values turn negative values into positives which is classified as links.. 
+testMatrix<-as.matrix(test) #matrix multiplication requires matrices
+testSignified<-sign(testMatrix>0)
+testSignified[!upper.tri(testSignified)] <- 0
+testsq<-testSignified %*% testSignified
+TestSUMM<-testSignified+testsq
+TestSUMM<-sign(TestSUMM>0)
+TestSUMM[1:30,1:30]
+
+
+Adlinks$PublishedTimeCleared.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$PublishedTimeCleared.1, Adlinks$PublishedTimeCleared.2)
+Adlinks$PublishedTimeCleared.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$PublishedTimeCleared.2, Adlinks$PublishedTimeCleared.1)
+
+Adlinks$SiteID.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$SiteID.1, Adlinks$SiteID.2)
+Adlinks$SiteID.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$SiteID.2, Adlinks$SiteID.1)
+
+Adlinks$Description.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$Description.1, Adlinks$Description.2)
+Adlinks$Description.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$Description.2, Adlinks$Description.1)
+
+Adlinks$SiteID.1<-Adlinks$SiteID.3
+Adlinks$SiteID.2<-Adlinks$SiteID.4
+Adlinks$Description.1<-Adlinks$Description.3
+Adlinks$Description.2<-Adlinks$Description.4
+Adlinks$PublishedTimeCleared.1<-Adlinks$PublishedTimeCleared.3
+Adlinks$PublishedTimeCleared.2<-Adlinks$PublishedTimeCleared.4
+
+Adlinks$Description.3<-NULL
+Adlinks$Description.4<-NULL
+
+Adlinks$SiteID.3<-NULL
+Adlinks$SiteID.4<-NULL
+
+Adlinks$PublishedTimeCleared.3<-NULL
+Adlinks$PublishedTimeCleared.4<-NULL
+
+Adlinks <- Adlinks[order(xtfrm(Adlinks$PublishedTimeCleared.1), xtfrm(Adlinks$PublishedTimeCleared.2)),, drop = FALSE]
+
+if(exists("FinalAdLinks")){
+  FinalAdLinks<-Adlinks[1,]
+} else {
+  #FinalAdLinks<-rbind()
+}
+
+#replace records
+AdPairs$SiteID.1<-replace(AdPairs$SiteID.1, AdPairs$SiteID.1==AdPairs[index,"SiteID.2"], AdPairs[index,"SiteID.1"])
+AdPairs$SiteID.1<-replace(AdPairs$SiteID.1, AdPairs$SiteID.1==AdPairs[index,"SiteID.2"], AdPairs[index,"SiteID.1"])
+AdPairs$SiteID.1<-replace(AdPairs$SiteID.1, AdPairs$SiteID.1==AdPairs[index,"SiteID.2"], AdPairs[index,"SiteID.1"])
+#remove duplicates
+
+
+write.csv(Adlinks,file="pairs.csv")
 AdPairs<-Adlinks[,c("SiteID.1","SiteID.2")]
 
 # consolidating the table 
 
-for(index in 1:nrow(AdPairs)){
-  replace(Adpairs$SiteID.1, Adpairs$SiteID.1==Adpairs[index,"SiteID.2"], Adpairs[index,"SiteID.1"])
-  Adpairs[index,"SiteID.2"]
-  
-  
-  
-  
-}
+#for(index in 1:nrow(AdPairs)){
+#  AdPairs$SiteID.1<-replace(AdPairs$SiteID.1, AdPairs$SiteID.1==AdPairs[index,"SiteID.2"], AdPairs[index,"SiteID.1"])
+#  Adpairs[index,"SiteID.2"]
+#}
+
+write.csv(AdPairs,file="correctedpairs.csv")
 #redoing this on entire dataset
 #DedupeTestLong<-AnalysisAdDetailList[,CompareBy]
 #LongfuzzyrpairsDefault<-compare.dedup(DedupeTestLong, blockfld =c("Kerulet","MeretCleared"), strcmp = TRUE, )

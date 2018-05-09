@@ -7,13 +7,18 @@
 
 # setup -------------------------------------------------------------------
 
-#In preparing to run the code on a (virtual) server, the file format needs to be changed to simple.R script. .R scripts do not automatically generate a new environment like .rmd-s, thus:
+#In preparation to running the code on a (virtual) server, the file format needs to be changed to simple.R script. .R scripts do not automatically generate a new environment like .rmd-s, thus:
 rm(list=ls())
 closeAllConnections()
+Projectfolder<-"~/Documents/Code/R/Realestatimator"
+setwd(Projectfolder)
 
-libraries<-c("rvest","stringi","data.table","sqldf","lubridate","dplyr")
+libraries<-c("rvest","stringi","data.table","sqldf","lubridate","dplyr","ggmap","mapproj","XML")
+
 for(index in 1:length(libraries)){
-   lapply(libraries, require, character.only = TRUE)
+  #cat(libraries[index])
+  require(libraries[index], character.only = TRUE)
+       #lapply(, require, character.only = TRUE)
 }
 
 # Functions ---------------------------------------------------------------
@@ -197,7 +202,7 @@ CleanUpLakásData<-function(hirdetéstábla){
 }
 
 hirdeteslista <- function(weblap){
-  library(rvest)
+  require(rvest)
   #első proba wrapperrel
   htmltempdata <- html_nodes(weblap,'section.reLiSection.subjectWrapper')
   #Converting the ranking data to text
@@ -369,7 +374,7 @@ UseExistingProject<-TRUE #non-predefined projects will be missing necessary file
 
 ProjectName<-"JofogasLakasokBPFull"
 
-#the below NULL-ifications are technically redundant.
+#the below NULL-ifications became technically redundant when resetting the environment was added to the top.
 TableOfProjectsFile<-"rest_TableOfProjects.Rda"
 TableOfProjects<-NULL
 ProjectData<-NULL
@@ -630,10 +635,8 @@ print("End of the line")
 
 
 # Locationwrangling -------------------------------------------------------
-# This section is responsible for typo corrections. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
+# This section is responsible for correcting common typos misspellings and alternate banes. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
 
-library(dplyr)
-library(stringi)
 
 replaceMe<-function(df,from,to,level='LocStreet1'){
   df[tolower(trimws(df$LocStreet1))==tolower(from),'LocStreet1']<-to
@@ -661,8 +664,6 @@ TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order(QueryTime,decrea
 TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList$SiteID),]
 TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList[c("MeretCleared","Description","Kerulet")]),]
 
-library(ggmap)
-library(mapproj)
 
 TestAdDetailList$LocStreet1<-gsub("\\d", "", TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-gsub("\\d", "", TestAdDetailList$LocStreet2) 
@@ -1000,20 +1001,19 @@ LocationFreqs$Total<-LocationFreqs$Col1Freq+LocationFreqs$Col2Freq
 
 LocationDF<-TestAdDetailList[,c('Kerulet','LocStreet1',"LocStreet2")]
 
+#We want to drop the location labels that do not have enough occurences to classify it with enough confidernce.
 LocationFreqs$drop<-ifelse(LocationFreqs$Total<7,TRUE,FALSE)
-
 LocationFreqsDrop<-LocationFreqs[!LocationFreqs$drop,]
-
 
 
 TestAdDetailList<-merge(TestAdDetailList,LocationFreqsDrop[,c('Location','Cat')],by.x="LocStreet1",by.y="Location",all.x=TRUE)
 TestAdDetailList$Cat1<-TestAdDetailList$Cat
-TestAdDetailList$Cat<-NULL
+TestAdDetailList$Cat<-NULL # we are reusing this variable
 
 TestAdDetailList<-merge(TestAdDetailList,LocationFreqsDrop[,c('Location','Cat')],by.x="LocStreet2",by.y="Location",all.x=TRUE)
 TestAdDetailList$Cat2<-TestAdDetailList$Cat
 TestAdDetailList$Cat<-NULL
-TestAdDetailList[is.na(TestAdDetailList$Cat1),'Cat1']<-0
+TestAdDetailList[is.na(TestAdDetailList$Cat1),'Cat1']<-0 #NAs are incomparable
 TestAdDetailList[is.na(TestAdDetailList$Cat2),'Cat2']<-0
 
 TestAdDetailList$Location1<-ifelse(TestAdDetailList$Cat1==1,TestAdDetailList$LocStreet1,ifelse(TestAdDetailList$Cat2==1,TestAdDetailList$LocStreet2,"NotSpecified"))
@@ -1024,20 +1024,21 @@ LocationTable<-TestAdDetailList[,c('SiteID','Location1','Location2')]
 LocationTable[LocationTable$Location1=="NotSpecified",'Location1']<-NA
 LocationTable[LocationTable$Location2=="NotSpecified",'Location2']<-NA
 
+#We are adding the consolidated location labels to the original record set.
 ProjectAdDetailList<-merge(ProjectAdDetailList,LocationTable,by.x="SiteID",by.y="SiteID",all.x=TRUE)
 
 saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
 
 
 # Reverse_Geocoding -------------------------------------------------------
+#Geocoding is using information to get geolocation data (latitudinal and longitudinal), reverse geocoding is - its reverse. Jofogas.hu stores the coordinates  on a minimap that we have scrapped in the earlier phase.
+#reverse geocoding will give us the postal names of these location. A major issue here is that the coordinates are generated by looking up the provided location data on google map. Unfortunately, as of the writing of this comment - 2018-04-28 - the site uses freetext instead of a closed list meaning that it sometimes recognises the wrong street or nothing at all producing bogus coordinates.
+#Truth to be told, if jofogas limited the acceptable values, the whole coordinate thing wouldn't even be necessary.
 
 cat("Beginning the execution of the chunk: Reverse_Geocoding")
-library(dplyr)
-library(ggmap)
-library(stringi)
-library(XML)
-CoordinateTableFile<-"CoordinateTable.Rda"
 
+
+CoordinateTableFile<-"CoordinateTable.Rda"
 file.copy(CoordinateTableFile, paste(getwd(),"/BackUp/",CoordinateTableFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
 
 CoordinateTable<-readRDS(CoordinateTableFile)
@@ -1158,7 +1159,9 @@ saveRDS(CoordinateCurrentTable,file=CoordinateTableFile)
 
 ProjectAdDetailList<-merge(ProjectAdDetailList,CoordinateCurrentTable[,!(colnames(CoordinateCurrentTable)%in% c("total","Status"))],by=c("Latitude","Longitude"),all.x=TRUE)
 
+#NAs are incomparable
 ProjectAdDetailList[is.na(ProjectAdDetailList$District),'District']<-"Missing"
+
 
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District V.",'District']<-"V. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District VI.",'District']<-"VI. kerület"
@@ -1167,7 +1170,6 @@ ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District==
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XIX",'District']<-"XIX. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XII.",'District']<-"XII. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XIII.",'District']<-"XIII. kerület"
-
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="Missing",'District']<-NA
 
 saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
@@ -1176,3 +1178,4 @@ saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
 if(exists("ProjectAdList")){rm(ProjectAdList)}
 
 # Producing the report ----------------------------------------------------
+cat("Execution completed")
