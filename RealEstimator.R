@@ -2,7 +2,7 @@
 #"Jófogás ingatlan webscraping process"
 #written by: Istvan Juhasz
 #contact: https://github.com/JuhaszIstvan  
-#to be executred daily.
+#to be executed daily.
 
 
 # setup -------------------------------------------------------------------
