@@ -628,18 +628,53 @@ SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailList"]<-ProjectCurr
 SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailEndTime"]<-end.time
 SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailStatus"]<-"Completed"
 saveRDS(SessionTable, file="SessionTable.Rda")
-
 saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
 
-print("End of the line")
+print("End of the main function")
 
 
 # Post-processing ---------------------------------------------------------
+# Updating the Adlist table with the specific timestamp of the addetail record. This information allows the creation of foreign composite keys to the AdDetailList table.
+SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
+
+ProjectAdDetailList<-readRDS(file=ProjectAdDetailListFile, refhook =NULL)
+ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
+
+
+ProSessionID="JofogasLakasokBPFull_20180107_20561I"
+ProSessionID="JofogasLakasokBPFull_20180309_1855JO"
+ProSessionID="JofogasLakasokBPFull_20180109_22058X"
+ProSessionID<-SessionID
+
+TestAdDetailList<-ProjectAdDetailList
+QueryEndTime<-SessionTable[SessionTable$SessionID==ProSessionID,"QueryAdDetailEndTime"]
+
+SessionTempAdList<-ProjectAdList[ProjectAdList$SessionID==ProSessionID,c('SiteID','SessionID')]
+TestAdDetailList<-TestAdDetailList[TestAdDetailList$SiteID %in% SessionTempAdList$SiteID,]
+TestAdDetailList$Deviance<-ifelse(QueryEndTime-TestAdDetailList$QueryTime>=0,QueryEndTime-TestAdDetailList$QueryTime,99999999999999999)
+TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order(Deviance)),]
+TestAdDetailList2<-TestAdDetailList[!duplicated(TestAdDetailList$SiteID,fromLast=FALSE),]
+
+SessionTempAdList3<-merge.data.frame(SessionTempAdList,TestAdDetailList2[,c("SiteID","QueryTime")],by="SiteID",all.x = TRUE, all.y = FALSE)
+
+library(sqldf)
+#ProjectAdList$QueryTime<-NA
+ProjectAdList2<-sqldf(c(paste("UPDATE ProjectAdList"
+              ," SET QueryTime = (SELECT SessionTempAdList3.QueryTime FROM SessionTempAdList3 WHERE ProjectAdList.SiteID = SessionTempAdList3.SiteID AND ProjectAdList.SessionID = SessionTempAdList3.SessionID)"
+              ," WHERE SessionID IN (SELECT SessionID FROM SessionTempAdList3)"
+)
+, " SELECT * FROM main.ProjectAdList"
+)
+)
+
+ProjectAdList<-ProjectAdList2
+
+saveRDS(ProjectAdList, file=ProjectAdListFile)
+
 
 
 # LocationWrangling -------------------------------------------------------
-# This section is responsible for correcting common typos misspellings and alternate banes. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
-
+# This section is responsible for correcting common typos misspellings and alternate names. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
 
 
 replaceMe<-function(df,from,to,level='LocStreet1'){
@@ -1175,12 +1210,6 @@ ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District==
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XIII.",'District']<-"XIII. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="Missing",'District']<-NA
 saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
-
-#Updating the Adlist table with the specific timestamp of the addetail record. This information allows the creation of foreign composite keys to the AdDetailList table.
-
-
-
-
 
 
 #Ditching the large data file.
