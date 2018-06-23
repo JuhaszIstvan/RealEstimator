@@ -5,9 +5,10 @@ The RealEstimator is webscraper written in R for the purposes of scraping real e
 The script was written with generalisation in mind.  
 Tested on: OpenSUSE Leap 42.3 and OpenSUSE Tumbleweed 20180410  
 Please note that the rJava package is the distro packaged version because the CRAN package has issues with the java on these distros.  
-written by: Juhasz Istvan 
+written by: Istvan Juhász 
 contact: [https://github.com/JuhaszIstvan](https://github.com/JuhaszIstvan )
 
+The project now contains as hinyapp which is very much in progress. You may visit it at [https://realestimator.shinyapps.io/ShinyRealEstimator/](https://realestimator.shinyapps.io/ShinyRealEstimator/)
 
 # Data Structure
 
