@@ -165,7 +165,7 @@ hirdetescrawler<-function(adurl,adAr=0){
   return(ValaszRecord)
 }
 
-CleanUpLakásData<-function(hirdetéstábla){
+CleanUpLakasData<-function(hirdetéstábla){
 
   #méret
   hirdetéstábla[,"Méret_Cleared"]<-as.numeric(as.character(gsub("[^0-9]","",hirdetéstábla[,"Méret:"])))
@@ -611,7 +611,7 @@ if(nrow(AdsToBeCollected)>0){
     }
     saveRDS(ProjectCurrentAdDetailList, file=ProjectCurrentAdDetailListFile)
   }
-  ProjectCurrentAdDetailList<-CleanUpLakásData(ProjectCurrentAdDetailList)
+  ProjectCurrentAdDetailList<-CleanUpLakasData(ProjectCurrentAdDetailList)
   saveRDS(ProjectCurrentAdDetailList, file=ProjectCurrentAdDetailListFile)
 }
 
@@ -634,8 +634,12 @@ saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
 print("End of the line")
 
 
-# Locationwrangling -------------------------------------------------------
+# Post-processing ---------------------------------------------------------
+
+
+# LocationWrangling -------------------------------------------------------
 # This section is responsible for correcting common typos misspellings and alternate banes. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
+
 
 
 replaceMe<-function(df,from,to,level='LocStreet1'){
@@ -1037,7 +1041,6 @@ saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
 
 cat("Beginning the execution of the chunk: Reverse_Geocoding")
 
-
 CoordinateTableFile<-"CoordinateTable.Rda"
 file.copy(CoordinateTableFile, paste(getwd(),"/BackUp/",CoordinateTableFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
 
@@ -1171,8 +1174,14 @@ ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District==
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XII.",'District']<-"XII. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="District XIII.",'District']<-"XIII. kerület"
 ProjectAdDetailList$District<-ProjectAdDetailList[ProjectAdDetailList$District=="Missing",'District']<-NA
-
 saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
+
+#Updating the Adlist table with the specific timestamp of the addetail record. This information allows the creation of foreign composite keys to the AdDetailList table.
+
+
+
+
+
 
 #Ditching the large data file.
 if(exists("ProjectAdList")){rm(ProjectAdList)}
