@@ -55,7 +55,6 @@ JofogasLakasokBPFull_20180101_23295P
 library(caret)
 library(Amelia)
 library(sqldf)
-#library(tidyverse)
 library(dplyr)
 library(reshape2)
 library(randomForest)
@@ -76,6 +75,7 @@ set.seed(7)
 LocationData=FALSE
 ZipData=TRUE
 DOsvm=FALSE
+Scope<-"Total"
 ```
 
 Loading the Session and general session information.
@@ -110,19 +110,7 @@ Since writing the following paragraph, I have realised that I could have used th
 In order to combat duplication , we could grab either the latest entry, or we could go for the entry that was online at the time of taking the snapsot. The latter has the advantage of rendering the data 'immutable', fixed.  To identify the relevant records, I cannot rely on any SessionIds as unchanged records would carry a prior scans' IDs. Luckily we have the timestamp of finishing the query and the query date of each record stored, with these piece of data, we can find the records that were created last or closest to the time of the snapshot while preceeding it.  Who knew playing safe and documenting everything could prove a venue for salvaging the project('s accuracy) against an unforseen issue? I did. I have been burnt before. A lot. 
 
 
-```{r identifying_the_proper_IDs}
-rm(n_occur)
-AnalysisAdDetailList$Deviance<-ifelse(QueryEndTime-AnalysisAdDetailList$QueryTime>0,QueryEndTime-AnalysisAdDetailList$QueryTime,9999999999999)
-#AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Deviance)),]
-#AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID), ]
-n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
 
-AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(QueryTime,decreasing = T)),]
-
-#TestAdDetailList<-TestAdDetailList[with(TestAdDetailList, order("QueryTime"),decreasing=TRUE), ]
-AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
-AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","Description","Kerulet")]),]
-```
 
 
 
@@ -155,26 +143,24 @@ Numerical
 It is unnecessary to keep Price in such a high digit. 
 
 ```{r wrangling_Ar}
-AnalysisAdDetailList$ArMil<-AnalysisAdDetailList$Ar/1000000
-AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$ArMil),]
+AnalysisAdDetailList$RC_ArMil<-AnalysisAdDetailList$Ar/1000000
+#please add this back later on
+#AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
 ggplot(data = AnalysisAdDetailList) +
-  geom_histogram(mapping = aes(x = ArMil), binwidth = 10)
+  geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
 ```
 Whoa can't even see these outliers
 ```{r wrangling_Ar2}
-head(AnalysisAdDetailList[with(AnalysisAdDetailList, order(ArMil),decreasing=T),'Description'])
+head(AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil),decreasing=T),'RC_Description'])
 ```
 
-
-
-
 ```{r wrangling_Ar3}
-Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(ArMil,decreasing = T)),]
+Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,decreasing = T)),]
 
-AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$ArMil),]
-AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$ArMil<200&AnalysisAdDetailList$ArMil>4,]
+#AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
+#AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$RC_ArMil<200&AnalysisAdDetailList$RC_ArMil>4,]
 ggplot(data = AnalysisAdDetailList) +
-  geom_histogram(mapping = aes(x = ArMil), binwidth = 10)
+  geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
 ```
 
 The response variable is negatively skewed. a logarithmic transformation might be in order. 
@@ -199,7 +185,7 @@ AnalysisAdDetailList$PicNums<-as.character(as.numeric(AnalysisAdDetailList$PicNu
 
 Fortunately the top 3 are development areas. For now, I am going to clip these ads off.
 ```{r LargeOutier}
-AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$MeretCleared<480,]
+#AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$MeretCleared<480,]
 ```
 the rest f the data looks rather skewed as well a log-log transformation is now almost certainly required.
 
@@ -231,7 +217,7 @@ District is the top localisation data, only 40 ads were missing. Manual inspecti
 
 ##District (Kerulet)
 ```{r Kerulet}
-AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$Kerulet),]
+#AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$Kerulet),]
 tempvariablename="Kerulet"
 AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
 ggplot(data=AnalysisAdDetailList)+
@@ -252,26 +238,27 @@ Due to them being binary, there is not a lot of prepocessing could possibly do.
 ###Built-in Kitchen(Konyha)
 ```{r Kitchen}
 tempvariablename="konyha"
+newvariablename="RC_KITCHEN_FURN"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==TRUE,newvariablename]<-"KITCH_FURN"
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==FALSE,newvariablename]<-"KITCH_NOT_FURN"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[newvariablename]])
+AnalysisAdDetailList[[tempvariablename]]<-NULL
 
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"KitchenIncluded"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"KitchenNotIncl"
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
-
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
-
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
 ```{r Parkingspace}
 tempvariablename="Parkolas"
+newvariablename="RC_PARKING"
 knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
 templevels<-levels(AnalysisAdDetailList[[tempvariablename]])
 AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+AnalysisAdDetailList[[tempvariablename]]<-NULL
 
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
@@ -282,49 +269,48 @@ knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA=
 ###Accessability(Akadalymentesitett)
 ```{r Accessability}
 tempvariablename="Akadalymentesitett"
+newvariablename="RC_Accessability"
 
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Handycappeady"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Handycapready"
 AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"NothandyCap"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
 
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+AnalysisAdDetailList[[tempvariablename]]<-NULL
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
-
 
 
 ###Appliances (Gepesitett)
 Indicates whether household appliances (washing machine, fridge) are included in the offer. 
 ```{r Appliances}
 tempvariablename="Gepesitett"
+newvariablename="RC_Appliances"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Appliances_included"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Appliances_included_NOT"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
 
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"MacchineryIncl"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"NotMachinised"
 
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
-
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 ###Alarm (Riaszto)
 ```{r Alarm}
 tempvariablename="Riaszto"
-
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Alarm"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Not_Alarmed"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
-
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+newvariablename="RC_Alarmed"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Alarmed"
+AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Alarmed_NOT"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 #ElevatorLift
 
 ```{r Lift}
 tempvariablename="Lift"
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+newvariablename="RC_Elevator"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
 
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 #Felszobakszama
@@ -332,17 +318,23 @@ knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA=
 
 ```{r SzobaSzam}
 tempvariablename="Felszobakszama"
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-0
-AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="5+",tempvariablename]<-5
+newvariablename="RC_RoomNumDemi"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-0
+AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="5+",newvariablename]<-5
 
-AnalysisAdDetailList[[tempvariablename]]<-as.numeric(AnalysisAdDetailList[[tempvariablename]])
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[[newvariablename]]<-as.numeric(AnalysisAdDetailList[[newvariablename]])
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
+
 
 tempvariablename="SzobaSzamCleared"
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-0
-AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="5+",tempvariablename]<-5
-AnalysisAdDetailList[[tempvariablename]]<-as.numeric(AnalysisAdDetailList[[tempvariablename]])
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+newvariablename="RC_RoomNumLarge"
+
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-0
+AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="5+",newvariablename]<-5
+AnalysisAdDetailList[[newvariablename]]<-as.numeric(AnalysisAdDetailList[[newvariablename]])
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 
 ```
 
@@ -351,39 +343,42 @@ knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA=
 
 ###Stand-alone Toilet (KulonWC)
 Indicates whether the toilet is located within the bathroom or in a separate room. 
-```{r Stand_alone_WC}
+```{r Separate_Toilet}
 tempvariablename="KulonWC"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"Separate_Toilet"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"Not_Separate"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+newvariablename="RC_Separate_Toilet"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==TRUE,newvariablename]<-"Toiler_Separate"
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==FALSE,newvariablename]<-"Toiler_Separate_NOT"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[newvariablename]])
 
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 ###Air Conditioning (Legkondicinalo)
 ```{r AirConditioning}
 tempvariablename="Legkondicinalo"
-
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==TRUE,tempvariablename]<-"AC"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])==FALSE,tempvariablename]<-"AC_Not"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("Not_Checked","Checked"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
+newvariablename="RC_AC"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==TRUE,newvariablename]<-"AC"
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])==FALSE,newvariablename]<-"AC_Not"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[newvariablename]])
 
 knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
 ```
 
-##State - Állapot 
+##Condition - Állapot 
 ```{r Allapot}
 tempvariablename="Allapot"
+newvariablename="RC_Condition"
 knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
 templevels<-levels(AnalysisAdDetailList[[tempvariablename]])
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="Új",tempvariablename]<-"Új építésű"
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
-AnalysisAdDetailList[[tempvariablename]]<-as.factor(AnalysisAdDetailList[[tempvariablename]])
 
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"State_NotSpecified"
+AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="Új",newvariablename]<-"Új_építésű"
+AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[newvariablename]])
+
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
@@ -393,15 +388,15 @@ knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA=
 ### Lease rights  
 ```{r berletijog}
 tempvariablename="Tulajdonjogberletijog"
+newvariablename="RC_Title"
 
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])=="Bérleti jog",tempvariablename]<-"Lease"
-AnalysisAdDetailList[(AnalysisAdDetailList[tempvariablename])=="Tulajdonjog",tempvariablename]<-"Ownership"
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","Lease","Ownership"),ordered=F)
-AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList[tempvariablename]=="Ownership",]
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-
-
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"Title_NotSpecified"
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])=="Bérleti jog",newvariablename]<-"Title_Lease"
+AnalysisAdDetailList[(AnalysisAdDetailList[newvariablename])=="Tulajdonjog",newvariablename]<-"Title_Ownership"
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],levels=c("Title_NotSpecified","Title_Lease","Title_Ownership"),ordered=F)
+#AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="Title_Ownership",]
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 
 ```
 
@@ -428,44 +423,44 @@ I am going to drop a few variables as well:
 
 ```{r Belmagassag}
 tempvariablename="Belmagassag"
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+newvariablename="RC_Room_Height"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"Height_NotSpecified"
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],levels=c("Height_NotSpecified","3 m alatt","3 m fölött"),ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
 ## Floor
-```{r Emeleted}
+```{r Emelet}
 tempvariablename="Emelet"
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = Emelet, y = ArMil)) + 
+newvariablename="RC_FLOOR"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
+pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 pEmeletet
 
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
-#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
 ```
-HUngary uses the british type of notations where the first floor is not the ground floor but the one immediately above it. Looking at the caht, it becomes quickly rather quite obvious that while the varianse is striking, it  is far from being linear. it  looks like that the distributions of the first, second, third and forth floors have similar characteristics.  
+Hnngary uses the british type of notations where the first floor is not the ground floor but the one immediately above it. Looking at the caht, it becomes quickly rather quite obvious that while the varianse is striking, it  is far from being linear. it  looks like that the distributions of the first, second, third and forth floors have similar characteristics.  
 
 ```{r Emeleted_dichotomised}
-AnalysisAdDetailList$EmeletOrg<-as.factor(AnalysisAdDetailList$Emelet)
-tempvariablename="Emelet"
+AnalysisAdDetailList$EmeletOrg<-as.factor(AnalysisAdDetailList$RC_FLOOR)
+tempvariablename="RC_FLOOR"
 AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("1","2","3","4","félemelet","5","6"),tempvariablename]<-"1-6th floors"
 AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("7","8","9","10","10+"),tempvariablename]<-"9+"
 AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("földszint","magasföldszint"),tempvariablename]<-"GroundFloor"
 
 AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=T)
 
-pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = Emelet, y = ArMil)) + 
+pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 pEmeletet
 
-#AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","3 m alatt","3 m fölött"),ordered=F)
-#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
 ```
 
 
@@ -473,16 +468,14 @@ pEmeletet
 Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
 ```{r Building_material}
 tempvariablename="Ingatlantipusa"
+newvariablename="RC_Material"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
 
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],levels=c("NotSpecified","tégla","panel","egyéb"),ordered=F)
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$Ingatlantipusa!="NotSpecified",]
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],levels=c("NotSpecified","tégla","panel","egyéb"),ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
+AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList[[newvariablename]]!="NotSpecified",]
 ```
-
-Ingatlantipusa =NA is too scarce, folds don' work?
-
 
 
 
@@ -491,52 +484,99 @@ Ingatlantipusa =NA is too scarce, folds don' work?
 Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
 ```{r heating}
 tempvariablename="Futestipusa"
-
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+newvariablename="RC_Heating"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
 Panel stands for 'prefab'. This building techniology was used heavily from the sixties to the late eighties and are generally considered to be low-income housing. 
 ```{r garden}
 tempvariablename="Kertkapcsolatos"
+newvariablename="RC_OwnYard"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
 
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
-knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],ordered=F)
+knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 ```
 
 
 
 ##Description(Description)
 Description is a freetext field. It is a prime target for text analysis. At a later time. 
+```{r Description}
+tempvariablename="Description"
+newvariablename="RC_Description"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+#reference numbers
+pattern<-".*azonosító:[[:space:]]*([^[:space:]]*)[[:space:]]*"
+pattern2<-".*referencia szám[[:space:]]*:[[:space:]]*([^[:space:]]*)[[:space:]]*"
+patternM<-".*(M[[:digit:]]{6,6})[^[:digit:]].*"
+
+AnalysisAdDetailList$RefNum<-gsub(pattern,"\\1",AnalysisAdDetailList$Description)
+
+```
 
 ##Advertiser(Hirdeto)
 
 ```{r Hirdeto}
 tempvariablename="Hirdeto"
+newvariablename="RC_Advertiser"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
 #knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],ordered=F)
 ```
 
 
 
 ```{r neighborhood}
 tempvariablename="neighborhood"
-#knitr::kable(as.data.frame(table(AnalysisAdDetailList[[tempvariablename]],useNA="ifany")))
-AnalysisAdDetailList[is.na(AnalysisAdDetailList[tempvariablename]),tempvariablename]<-"NotSpecified"
-AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=F)
+newvariablename="RC_Neighborhood"
+AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
+
+AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
+AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariablename]],ordered=F)
 ```
 
+
+
+
+
+
+```{r identifying_the_proper_IDs}
+rm(n_occur)
+AnalysisAdDetailList$Deviance<-ifelse(QueryEndTime-AnalysisAdDetailList$QueryTime>0,QueryEndTime-AnalysisAdDetailList$QueryTime,9999999999999)
+n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
+
+Scope<-"Total"
+if(Scope=="Total") {
+AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(QueryTime,decreasing = T)),]
+}
+
+if(Scope=="Snapshot") {
+AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Deviance)),]
+}
+#crude deduplication
+#AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
+#AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
+
+```
 
 
 ```{r dropping_columns}
-AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryTime","QueryState", "Havikozoskoltseg"))]
+AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicionalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos"))]
+
+exportedShiny<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("RefNum","RC_Description"))]
+
+saveRDS(exportedShiny,"exportedversion.Rda")
+
 ```
+
+
 
 
 After finishing the data cleaning, we are now able to use these variables to find fuzzyduplicates, or near matches using compare.linkage and recordlinkage() packages. The following experimenting relies on information gathered from the article by the package authors( available here:https://journal.r-project.org/archive/2010-2/RJournal_2010-2_Sariyar+Borg.pdf)
@@ -547,19 +587,19 @@ a successful classification is maximum.
 Let's load the library and generate a simple control table for comparison.
 ```{r RecordLinkage}
 library(RecordLinkage)
-#test population
-DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$SzobaSzamCleared=="3" & AnalysisAdDetailList$Kerulet=="XVIII." & AnalysisAdDetailList$MeretCleared==74,]
+#small reproducible test
+DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$RC_RoomNumLarge=="3" & AnalysisAdDetailList$Kerulet=="XVIII." & AnalysisAdDetailList$MeretCleared==74,]
 
-#larger DedupeTestSet
+#large TestSet
 DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet=="XVIII.",]
 
-  CompareBy<-c("SiteID","Description","MeretCleared","Kerulet","EmeletOrg","ArMil","PublishedTimeCleared")
+  CompareBy<-c("SiteID","RC_Description","MeretCleared","Kerulet","EmeletOrg","RC_ArMil","PublishedTimeCleared")
   Blockfields<-c("Kerulet","MeretCleared","EmeletOrg")
   ExcludeTheseFields<-c("SiteID","PublishedTimeCleared")
 DedupeTestLimited<-DedupeTestSet[,CompareBy]
 #DedupeFullLimited<-AnalysisAdDetailList[,CompareBy]
 
-#calculating the number comparison pairs
+#calculating the number of comparison pairs
 Estimation <- AnalysisAdDetailList %>%
   group_by_at(vars(one_of(Blockfields))) %>%
   summarize(n = n(),npairs=n*(n-1)/2)
@@ -568,22 +608,22 @@ sum(Estimation$npairs)
 
 #back to business
 
-#adding fuzzy comparison, the numbers seem to be working out well.
+#adding fuzzy comparison, the numeric variables seem to be working out well.
 #rpairs <- compare.dedup(DedupeTestShort, blockfld = c("Kerulet","MeretCleared"))
  #the default fuzzyrpairs is jarowinkler, 
 
 #the strcmp doesn't have to fuzzycompare anything. column position supplied.
-fuzzyrpairsDefault<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp = which(colnames(DedupeTestLimited) %in% c("Description")), exclude=which(colnames(DedupeTestLimited) %in% ExcludeTheseFields))
+fuzzyrpairsDefault<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp = which(colnames(DedupeTestLimited) %in% c("RC_Description")), exclude=which(colnames(DedupeTestLimited) %in% ExcludeTheseFields))
 
- #the alternative is levenshteinSim
+#the alternative is levenshteinSim
 #fuzzyrpairslevenshteinSim<-compare.dedup(DedupeTestLimited, blockfld = Blockfields, strcmp=TRUE, strcmpfun =  levenshteinSim)
 
-#the the stochastic method ( sans underlying stochastic modell, use manual fixing)
+#the the stochastic method ( ans underlying stochastic modell, use manual fixing)
 fuzzyrpairsDefault$pairs
 
 emWeightedPairs<-emWeights(fuzzyrpairsDefault)
 
-#With EPI
+#With EPI. We don't do EPI
 #epiWeightedPairs<-epiWeights(fuzzyrpairsDefault, e = 0.05)
 #epiresult <- epiClassify(fuzzyrpairsDefault, 0.55)
 
@@ -600,9 +640,10 @@ AllPairs<-getPairs(emResult, single.rows=TRUE)
 #we need to group multiple records together. TThe simpler way is just replacing items until the vectors are normalised.
 #The second option borrows the ideas from network studies. 'Unmelting', or using dplyr's terminology (gathering)(check it!) the Aj:Rj2 nx2 data frames into a matrix where the values store the status or value of the link between the row's  and the column's agent, we will get a table that is referred to the 'adjacency matrix'. The adjacency matrices have a very interesting attribute: While it is identical form shows the one step connections bertween two items, its square ( A * A ) gives us the 2 step distance, it's cube the 3 step distance and so on. ASsuming that we define a cutoff distance of 2 steps, then summng and normaling them gives us whether connection exists between two items: sign(A + A*A) 
 
-#Demelting
+#Matrixing 
 test<-dcast(AllPairs, formula = SiteID.1 ~ SiteID.2, value="Weight", fill=0)
-test_backsave<-test
+test_snapshot<-test
+
 if(!is.null(test$SiteID.1))
 {
  row.names(test)<-test$SiteID.1
@@ -610,8 +651,8 @@ if(!is.null(test$SiteID.1))
 }
 #the two step relations require the adjacency matrix to be squared. This requires a) matrices and b) need the weights need to be normalised onto to a [0-1] scale vbecasue squaring these values turn negative values into positives which is classified as links.. 
 testMatrix<-as.matrix(test) #matrix multiplication requires matrices
-testSignified<-sign(testMatrix>0)
-testSignified[!upper.tri(testSignified)] <- 0
+testSignified<-sign(testMatrix>0) #collaping it to 0,1
+testSignified[!upper.tri(testSignified)] <- 0 #halving
 testsq<-testSignified %*% testSignified
 TestSUMM<-testSignified+testsq
 TestSUMM<-sign(TestSUMM>0)
@@ -624,18 +665,18 @@ Adlinks$PublishedTimeCleared.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$P
 Adlinks$SiteID.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$SiteID.1, Adlinks$SiteID.2)
 Adlinks$SiteID.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$SiteID.2, Adlinks$SiteID.1)
 
-Adlinks$Description.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$Description.1, Adlinks$Description.2)
-Adlinks$Description.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$Description.2, Adlinks$Description.1)
+Adlinks$RC_Description.3<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$RC_Description.1, Adlinks$RC_Description.2)
+Adlinks$RC_Description.4<-ifelse(Adlinks$PublishedTimeCleared.1<=Adlinks$PublishedTimeCleared.2,Adlinks$RC_Description.2, Adlinks$RC_Description.1)
 
 Adlinks$SiteID.1<-Adlinks$SiteID.3
 Adlinks$SiteID.2<-Adlinks$SiteID.4
-Adlinks$Description.1<-Adlinks$Description.3
-Adlinks$Description.2<-Adlinks$Description.4
+Adlinks$RC_Description.1<-Adlinks$RC_Description.3
+Adlinks$RC_Description.2<-Adlinks$RC_Description.4
 Adlinks$PublishedTimeCleared.1<-Adlinks$PublishedTimeCleared.3
 Adlinks$PublishedTimeCleared.2<-Adlinks$PublishedTimeCleared.4
 
-Adlinks$Description.3<-NULL
-Adlinks$Description.4<-NULL
+Adlinks$RC_Description.3<-NULL
+Adlinks$RC_Description.4<-NULL
 
 Adlinks$SiteID.3<-NULL
 Adlinks$SiteID.4<-NULL
@@ -721,15 +762,15 @@ One of the most widely  used techinque is the so called K-fold crossvalidation, 
 
 #Data Partitioning
 ```{r data_partitioning}
-#ModelData<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet  %in% c("VIII.","IX.") &!(is.na(AnalysisAdDetailList$ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Location1)),]
+#ModelData<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet  %in% c("VIII.","IX.") &!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Location1)),]
 
-ModelData<-AnalysisAdDetailList[!(is.na(AnalysisAdDetailList$ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Kerulet)),]
+ModelData<-AnalysisAdDetailList[!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Kerulet)),]
 
 ModelData$Location1<-as.factor(ModelData$Location1)
 
 dim(ModelData)
 
-TrainingIndex <- createDataPartition(ModelData$ArMil, p = .80, list = FALSE,groups = min(5, length(ModelData$ArMil)))
+TrainingIndex <- createDataPartition(ModelData$RC_ArMil, p = .80, list = FALSE,groups = min(5, length(ModelData$RC_ArMil)))
 TrainingSet <- ModelData[ TrainingIndex,]
 TestSet <- ModelData[-TrainingIndex,]
 dim(TrainingSet)
@@ -774,7 +815,7 @@ Bivariate plot between every pair of attributes
 ```{r bivariate heatmap}
 #Template used:http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
 
-HeatMapTable <- TrainingSet[, c("ArMil","MeretCleared","KozkoltsegFtho","SzobaSzamCleared")]
+HeatMapTable <- TrainingSet[, c("RC_ArMil","MeretCleared","KozkoltsegFtho","RC_RoomNumLarge")]
 CorMat<-round(cor(HeatMapTable,use = "pairwise.complete"),2)
 head(CorMat)
 
@@ -823,33 +864,33 @@ ggheatmap+
   guides(fill = guide_colorbar(barwidth = 7, barheight = 1,
                 title.position = "top", title.hjust = 0.5))
 
-pKitchen<-ggplot(data = TrainingSet, mapping = aes(x = konyha, y = ArMil)) +
+pKitchen<-ggplot(data = TrainingSet, mapping = aes(x = RC_KITCHEN_FURN, y = RC_ArMil)) +
 geom_boxplot() +
 coord_cartesian(ylim = c(0, 100))
 
-pAppliances<-ggplot(data = TrainingSet, mapping = aes(x = Gepesitett, y = ArMil)) + 
+pAppliances<-ggplot(data = TrainingSet, mapping = aes(x = RC_Appliances, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
-pAlarm<-ggplot(data = TrainingSet, mapping = aes(x = Riaszto, y = ArMil)) + 
+pAlarm<-ggplot(data = TrainingSet, mapping = aes(x = RC_Alarmed, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
-pWC<-ggplot(data = TrainingSet, mapping = aes(x = KulonWC, y = ArMil)) + 
+pWC<-ggplot(data = TrainingSet, mapping = aes(x = RC_Separate_Toilet, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
-pAC<-ggplot(data = TrainingSet, mapping = aes(x = Legkondicinalo, y = ArMil)) + 
+pAC<-ggplot(data = TrainingSet, mapping = aes(x = RC_AC, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
-pCT<-ggplot(data = TrainingSet, mapping = aes(x = Tulajdonjogberletijog, y = ArMil)) + 
-  geom_boxplot() +
-  coord_cartesian(ylim = c(0, 100))
-
-pEmeletet<-ggplot(data = TrainingSet, mapping = aes(x = Emelet, y = ArMil)) + 
+pCT<-ggplot(data = TrainingSet, mapping = aes(x = RC_Title, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 
+pEmeletet<-ggplot(data = TrainingSet, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
 
 
-pAccess<-ggplot(data = TrainingSet, mapping = aes(x = Akadalymentesitett, y = ArMil)) + 
+
+pAccess<-ggplot(data = TrainingSet, mapping = aes(x = RC_Accessability, y = RC_ArMil)) + 
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 
@@ -862,25 +903,25 @@ p5<-ggplot(data=TrainingSet)+
   geom_bar(mapping = aes(x = Kerulet), fill='orange')
 
 p4<-ggplot(data=TrainingSet)+
-  geom_bar(mapping = aes(x = Kerulet, fill=Ingatlantipusa), position="dodge")
+  geom_bar(mapping = aes(x = Kerulet, fill=RC_Material), position="dodge")
 
 
 p3<-ggplot(data=TrainingSet)+
-  geom_point(mapping = aes(x=MeretCleared, y=ArMil), position="jitter")+
-  geom_smooth(mapping = aes(x = MeretCleared, y = ArMil, group = Kerulet))
+  geom_point(mapping = aes(x=MeretCleared, y=RC_ArMil), position="jitter")+
+  geom_smooth(mapping = aes(x = MeretCleared, y = RC_ArMil, group = Kerulet))
 
 
 p1<-ggplot(data=TrainingSet)+coord_cartesian(xlim = c(0, 150), ylim = c(0, 70))+
-  geom_point(mapping = aes(x=MeretCleared, y=ArMil, colour=Kerulet), position="jitter")+
-  geom_smooth(mapping = aes(x = MeretCleared, y = ArMil, group = Kerulet))
+  geom_point(mapping = aes(x=MeretCleared, y=RC_ArMil, colour=Kerulet), position="jitter")+
+  geom_smooth(mapping = aes(x = MeretCleared, y = RC_ArMil, group = Kerulet))
 
 KeruletSummery<-TrainingSet%>%
   group_by(Kerulet)%>%
   summarise(
-  ArMil=mean(ArMil, na.rm=TRUE),
+  RC_ArMil=mean(RC_ArMil, na.rm=TRUE),
   n=n()
   )
-p2<-ggplot(KeruletSummery, aes(Kerulet,ArMil)) + 
+p2<-ggplot(KeruletSummery, aes(Kerulet,RC_ArMil)) + 
   geom_point()
 
 grid.arrange(p1, p4, p3,p2,p5, ncol=2)
@@ -890,10 +931,10 @@ grid.arrange(p1, p4, p3,p2,p5, ncol=2)
 #KeruletOnly
 TrainingSet$MC2<-TrainingSet$MeretCleared^2
 TrainingSet$MeretLog<-log(TrainingSet$MeretCleared)
-TrainingSet$LogMil<-log(TrainingSet$ArMil)
+TrainingSet$LogMil<-log(TrainingSet$RC_ArMil)
 TrainingSet$MeretExp<-exp(TrainingSet$MeretCleared)
 
-ArMil<-TrainingSet$ArMil
+RC_ArMil<-TrainingSet$RC_ArMil
 simpleMod <- dummyVars(~MeretCleared + Kerulet+Kerulet:MeretCleared,
                        data = TrainingSet,
                        ## Remove the variable name from the
@@ -903,19 +944,19 @@ WithInteract<-predict(simpleMod,TrainingSet)
 
 
 
-LM_model1<-train(y=ArMil,x=WithInteract, method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_model1<-train(y=RC_ArMil,x=WithInteract, method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 
 #negyzetes taggal
-LM_modelquad<-train(ArMil~MeretCleared+MC2+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_modelquad<-train(RC_ArMil~MeretCleared+MC2+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelquad)
 
 #negyzetes tagnelkul tisztan
 # RMSE      Rsquared   MAE     
 #  13.19065  0.7115969  8.563517
-LM_modelsimple<-train(ArMil~MeretCleared+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_modelsimple<-train(RC_ArMil~MeretCleared+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelsimple)
 
-LM_modelquadInteractio<-train(ArMil~MeretCleared:Kerulet+MC2:Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_modelquadInteractio<-train(RC_ArMil~MeretCleared:Kerulet+MC2:Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelquadInteractio)
 
 
@@ -924,10 +965,10 @@ print(LM_modelquadInteractio)
 #RMSE      Rsquared   MAE     
 #12.27934  0.7496871  7.691969
 
-LM_modelquadInteractionwithLog<-train(LogMil~MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_modelquadInteractionwithLog<-train(LogMil~MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+RC_Condition+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelquadInteractionwithLog)
 
-LM_modelquadInteractionwithexp<-train(ArMil~MeretExp:Kerulet+MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_modelquadInteractionwithexp<-train(RC_ArMil~MeretExp:Kerulet+MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+RC_Condition+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelquadInteractionwithexp)
 
 
@@ -948,98 +989,98 @@ if(LocationData)
   #LM_model1  
 #RMSE      Rsquared   MAE     
 #12.41814  0.7445562  7.747817  
-LM_model1<-train(ArMil~MeretCleared*Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_model1<-train(RC_ArMil~MeretCleared*Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_model1)
   
-LM_model9<-train(ArMil~MeretCleared+MeretCleared^2+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_model9<-train(RC_ArMil~MeretCleared+MeretCleared^2+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+Kerulet+RC_Condition+RC_Material+Futestipusa+RC_FLOOR,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_model9)
   
   
-LM_model7<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_model7<-train(RC_ArMil~MeretCleared+RC_Title+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+Location1+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_model7)
 
-#PredSet<-TrainingSet[,c("MeretCleared","Parkolas","Belmagassag","Felszobakszama","SzobaSzamCleared","Location1","Kerulet","Allapot","Ingatlantipusa","Futestipusa","Emelet")]
+#PredSet<-TrainingSet[,c("MeretCleared","RC_PARKING","RC_Room_Height","RC_RoomNumDemi","RC_RoomNumLarge","Location1","Kerulet","RC_Condition","RC_Material","RC_Heating","RC_FLOOR")]
 
-PredSet<-TrainingSet[,c("MeretCleared","Parkolas","Belmagassag","Felszobakszama","SzobaSzamCleared","Kerulet","Allapot","Ingatlantipusa","Futestipusa","Emelet")]
+PredSet<-TrainingSet[,c("MeretCleared","RC_PARKING","RC_Room_Height","RC_RoomNumDemi","RC_RoomNumLarge","Kerulet","RC_Condition","RC_Material","RC_Heating","RC_FLOOR")]
 
-LM_model8<-train(ArMil~MeretCleared+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_model8<-train(RC_ArMil~MeretCleared+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+Location1+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR+RC_KITCHEN_FURN+RC_Appliances,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_model8)
 
-LM_nonform_1<- train(PredSet, TrainingSet$ArMil, method = "lm",  preProc = c("center", "scale"), trControl = trainControl(method = "cv"),na.action="na.exclude")
+LM_nonform_1<- train(PredSet, TrainingSet$RC_ArMil, method = "lm",  preProc = c("center", "scale"), trControl = trainControl(method = "cv"),na.action="na.exclude")
 
 
 
 
 }
 
-#svmRTuned <- train(PredSet, TrainingSet$ArMil, method = "svmRadial",  preProc = c("center", "scale"),  tuneLength = 14, trControl = trainControl(method = "cv"))
+#svmRTuned <- train(PredSet, TrainingSet$RC_ArMil, method = "svmRadial",  preProc = c("center", "scale"),  tuneLength = 14, trControl = trainControl(method = "cv"))
 
-#svm2<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Location1, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
+#svm2<-train(RC_ArMil~MeretCleared+RC_Title+Kerulet+Location1, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
 
 #svm2
 
 if(ZipData & DOsvm){
-svmNeighbour<-train(ArMil~MeretCleared, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
+svmNeighbour<-train(RC_ArMil~MeretCleared, data=TrainingSet, method = "svmRadial", tuneLength = 14, trControl = trainControl(method = "cv"))
 svmNeighbour
 }
 ZipData<-FALSE
 if(ZipData){
-LM_Zipmodel1<-train(ArMil~MeretCleared+MeretCleared*neighborhood+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+neighborhood+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Zipmodel1<-train(RC_ArMil~MeretCleared+MeretCleared*RC_Neighborhood+RC_Title+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+RC_Neighborhood+RC_Condition+RC_Material+RC_Heating+RC_FLOOR+RC_KITCHEN_FURN+RC_Appliances,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Zipmodel1)
 
-LM_Kermodel0<-train(ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Kermodel0<-train(RC_ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+RC_Title+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+RC_Condition+RC_Material+RC_Heating+RC_FLOOR+RC_KITCHEN_FURN+RC_Appliances+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel)
 
 
-LM_Kermodel1<-train(ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+Tulajdonjogberletijog+Parkolas+Belmagassag+Felszobakszama+SzobaSzamCleared+Allapot+Ingatlantipusa+Futestipusa+Emelet+konyha+Gepesitett+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Kermodel1<-train(RC_ArMil~MeretCleared+MeretCleared^2+MeretCleared*Kerulet+RC_Title+RC_PARKING+RC_Room_Height+RC_RoomNumDemi+RC_RoomNumLarge+RC_Condition+RC_Material+RC_Heating+RC_FLOOR+RC_KITCHEN_FURN+RC_Appliances+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel)
 
 
-LM_Kermodel3<-train(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Kermodel3<-train(RC_ArMil~MeretCleared+Kerulet+RC_Title,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel3)
 
-#leave allapot behind
-LM_Kermodel4<-train(ArMil~MeretCleared*Kerulet+Allapot,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+#leave RC_Condition behind
+LM_Kermodel4<-train(RC_ArMil~MeretCleared*Kerulet+RC_Condition,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel4)
 
-LM_Kermodel4<-train(ArMil~MeretCleared*Kerulet+Allapot,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Kermodel4<-train(RC_ArMil~MeretCleared*Kerulet+RC_Condition,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel4)
 
-LM_Kermodel5<-train(ArMil~MeretCleared*Kerulet+Allapot+Parkolas,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+LM_Kermodel5<-train(RC_ArMil~MeretCleared*Kerulet+RC_Condition+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_Kermodel5)
 
 
 TrainingSet1<-TrainingSet%>%add_residuals(LM_Kermodel5)
 
 TrainingSet1<-TrainingSet1%>%add_predictions(LM_Kermodel5)
-xyplot(TrainingSet1$ArMil ~ TrainingSet1$pred, type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+xyplot(TrainingSet1$RC_ArMil ~ TrainingSet1$pred, type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
 
 xyplot(TrainingSet1$resid ~ TrainingSet1$pred, type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
 
 xyplot(TrainingSet1$resid ~ TrainingSet1$MeretCleared, type = c("p", "g"), xlab = "MeretCleared", ylab = "Residuals")
-#xyplot(TrainingSet$ArMil ~ predict(LM_Kermodel), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+#xyplot(TrainingSet$RC_ArMil ~ predict(LM_Kermodel), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
 
 #xyplot(resid(LM_Kermodel0) ~ predict(LM_Kermodel0), type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
 
 }
 
 
-rfModel0<-randomForest(ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
+rfModel0<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
 print(rfModel0)
 
-rfModel1<-randomForest(ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
+rfModel1<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=TrainingSet,ntrees = 1000)
  print(rfModel1)
 
-rfModel2<-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+rfModel2<-randomForest(RC_ArMil~MeretCleared+Kerulet+RC_Title,data=TrainingSet,ntrees = 1000)
  print(rfModel2)
    
-rfModel3<-randomForest(ArMil~MeretCleared*(Kerulet)*Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+rfModel3<-randomForest(RC_ArMil~MeretCleared*(Kerulet)*RC_Title,data=TrainingSet,ntrees = 1000)
  print(rfModel3)
  
-rfModel4<-randomForest(ArMil~(MeretCleared+Kerulet)*Tulajdonjogberletijog,data=TrainingSet,ntrees = 1000)
+rfModel4<-randomForest(RC_ArMil~(MeretCleared+Kerulet)*RC_Title,data=TrainingSet,ntrees = 1000)
 
    
-rfModelFull <-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet+Parkolas,data=TrainingSet,ntrees = 100)
+rfModelFull <-randomForest(RC_ArMil~MeretCleared+Kerulet+RC_Title+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR+RC_PARKING,data=TrainingSet,ntrees = 100)
 print(rfModel)
 
 #MP5
@@ -1047,11 +1088,11 @@ print(rfModel)
 #Correlation coefficient                  0.8764
 #Mean absolute error                      7.6151
 #Root mean squared error                 13.5288
-modelTree_neighborhood <- M5P(ArMil ~ MeretCleared+Parkolas+Allapot+Emelet+Kerulet+neighborhood, data = TrainingSet, control = Weka_control(M = 10))
-summary(modelTree_neighborhood)
-PredSet<-TrainingSet[,c('MeretCleared','Kerulet','Parkolas')]
+modelTree_RC_Neighborhood <- M5P(RC_ArMil ~ MeretCleared+RC_PARKING+RC_Condition+RC_FLOOR+Kerulet+RC_Neighborhood, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree_RC_Neighborhood)
+PredSet<-TrainingSet[,c('MeretCleared','Kerulet','RC_PARKING')]
 
-modelTree_Kerulet<- M5P(ArMil ~ PredSet, data = TrainingSet, control = Weka_control(M = 10))
+modelTree_Kerulet<- M5P(RC_ArMil ~ PredSet, data = TrainingSet, control = Weka_control(M = 10))
 
 
 #modeltree neighbourhood only 
@@ -1060,23 +1101,23 @@ modelTree_Kerulet<- M5P(ArMil ~ PredSet, data = TrainingSet, control = Weka_cont
 #Mean absolute error                      8.8198
 #Root mean squared error                 16.0843
 
-modelTree_neighborhood_keruletOFF<- M5P(ArMil ~ MeretCleared+Parkolas+Allapot+Emelet+Location1, data = TrainingSet, control = Weka_control(M = 10))
-summary(modelTree_neighborhood_keruletOFF)
-PredSet<-TrainingSet[,c('MeretCleared','Kerulet','Parkolas')]
+modelTree_RC_Neighborhood_keruletOFF<- M5P(RC_ArMil ~ MeretCleared+RC_PARKING+RC_Condition+RC_FLOOR+Location1, data = TrainingSet, control = Weka_control(M = 10))
+summary(modelTree_RC_Neighborhood_keruletOFF)
+PredSet<-TrainingSet[,c('MeretCleared','Kerulet','RC_PARKING')]
 
 
 
 ##12.404
-modelTree1 <- M5P(ArMil ~ MeretCleared+Allapot+Kerulet+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+modelTree1 <- M5P(RC_ArMil ~ MeretCleared+RC_Condition+Kerulet+RC_Material+RC_KITCHEN_FURN+RC_Room_Height+RC_PARKING+RC_FLOOR+RC_Heating, data = TrainingSet, control = Weka_control(M = 10))
 
 summary(modelTree1)
 #12.11
-modelTree2 <- M5P(ArMil ~ MeretCleared+Allapot+Kerulet+Ingatlantipusa+konyha+Kertkapcsolatos+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+modelTree2 <- M5P(RC_ArMil ~ MeretCleared+RC_Condition+Kerulet+RC_Material+RC_KITCHEN_FURN+Kertkapcsolatos+RC_Room_Height+RC_PARKING+RC_FLOOR+RC_Heating, data = TrainingSet, control = Weka_control(M = 10))
 summary(modelTree2)
 
 
 #quadratic situation doesn't change the data 
-modelTree3 <- M5P(ArMil ~ MeretCleared+MeretCleared^2+Allapot+Kerulet+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+modelTree3 <- M5P(RC_ArMil ~ MeretCleared+MeretCleared^2+RC_Condition+Kerulet+RC_Material+RC_KITCHEN_FURN+RC_Room_Height+RC_PARKING+RC_FLOOR+RC_Heating, data = TrainingSet, control = Weka_control(M = 10))
 summary(modelTree3)
 # modelTree3 Root mean squared error                 11.8772 
 
@@ -1084,7 +1125,7 @@ summary(modelTree3)
 
     
 
-modelTree4 <- M5P(ArMil ~ MeretCleared+Allapot+Location1+Ingatlantipusa+konyha+Kertkapcsolatos+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+modelTree4 <- M5P(RC_ArMil ~ MeretCleared+RC_Condition+Location1+RC_Material+RC_KITCHEN_FURN+Kertkapcsolatos+RC_Room_Height+RC_PARKING+RC_FLOOR+RC_Heating, data = TrainingSet, control = Weka_control(M = 10))
 summary(modelTree4)
 
 #modelTree4
@@ -1098,7 +1139,7 @@ summary(modelTree4)
 
 
 
-m5tree2 <- M5P(ArMil ~ log(MeretCleared)+Allapot+Ingatlantipusa+konyha+Belmagassag+Parkolas+Emelet+Futestipusa, data = TrainingSet, control = Weka_control(M = 10))
+m5tree2 <- M5P(RC_ArMil ~ log(MeretCleared)+RC_Condition+RC_Material+RC_KITCHEN_FURN+RC_Room_Height+RC_PARKING+RC_FLOOR+RC_Heating, data = TrainingSet, control = Weka_control(M = 10))
 summary(m5tree2)
 #m5tree2
 #=== Summary === 
@@ -1117,11 +1158,11 @@ TrainingSet1<-TrainingSet%>%add_residuals(m5tree1)
 TrainingSet1<-TrainingSet1%>%add_predictions(m5tree1)
 
 
-#Tulajdonjogberletijog+Kerulet+neighborhood
-#rfModel <-randomForest(ArMil~MeretCleared+Kerulet+Tulajdonjogberletijog+Location1+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,ntrees = 1000)
+#RC_Title+Kerulet+RC_Neighborhood
+#rfModel <-randomForest(RC_ArMil~MeretCleared+Kerulet+RC_Title+Location1+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR,data=TrainingSet,ntrees = 1000)
 #print(rfModel)
 
-#fit<-train(ArMil~MeretCleared+Kerulet+Ingatlantipusa+Belmagassag+Tulajdonjogberletijog+Allapot+Futestipusa+LocStreet1,data=ModelData,method="lm",metric="RMSE",trControl=control,na.action = "na.omit")
+#fit<-train(RC_ArMil~MeretCleared+Kerulet+RC_Material+RC_Room_Height+RC_Title+RC_Condition+RC_Heating+LocStreet1,data=ModelData,method="lm",metric="RMSE",trControl=control,na.action = "na.omit")
 #print(fit)
 ```
 
@@ -1174,7 +1215,7 @@ pls has 1 tuningparameters:no variables to retain.
 
 
 ```{r model_building}
-model_Meret<- lm(ArMil ~ MeretCleared, data = TrainingSet)
+model_Meret<- lm(RC_ArMil ~ MeretCleared, data = TrainingSet)
 coef(model_Meret)
 grid <- TrainingSet %>%
   data_grid(MeretCleared)
@@ -1187,7 +1228,7 @@ TrainingSet<-TrainingSet %>%
 #as_tibble(AnalysisAdDetailList)
 
 P1<-ggplot(model_Meret, aes( MeretCleared)) + 
-  geom_point(aes(y = ArMil)) +
+  geom_point(aes(y = RC_ArMil)) +
   geom_line(aes(y = pred),data=grid, colour = "red", size = 1)
 P2<-ggplot(TrainingSet, aes(resid)) + 
   geom_freqpoly(binwidth = 0.5)
@@ -1209,16 +1250,16 @@ AnalysisAdDetailList$PredictedValue<-predict(LM_model7, AnalysisAdDetailList)
 
 
 #robust lm model
-#RLM_model<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="lm",metric="RMSE",trControl=control,model=T)
-lmValues1 <- data.frame(obs = TestSet$ArMil, pred = TestSet$Pred_LM7)
+#RLM_model<-train(RC_ArMil~MeretCleared+RC_Title+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR,data=TrainingSet,method="lm",metric="RMSE",trControl=control,model=T)
+lmValues1 <- data.frame(obs = TestSet$RC_ArMil, pred = TestSet$Pred_LM7)
 defaultSummary(lmValues1)
 
 #robust
-#rlmPCA<-train(ArMil~MeretCleared+Tulajdonjogberletijog+Kerulet+Allapot+Ingatlantipusa+Futestipusa+Emelet,data=TrainingSet,method="rlm",metric="RMSE",trControl=TRC_CV10,model=T)
+#rlmPCA<-train(RC_ArMil~MeretCleared+RC_Title+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR,data=TrainingSet,method="rlm",metric="RMSE",trControl=TRC_CV10,model=T)
 ```
 
 ```{r plotting}
-xyplot(TrainingSet$ArMil ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
+xyplot(TrainingSet$RC_ArMil ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
 xyplot(resid(LM_model7) ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
 ```
 
