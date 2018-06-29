@@ -78,14 +78,15 @@ DOsvm=FALSE
 Scope<-"Total"
 ```
 
-Loading the Session and general session information.
-
-```{r load_data}
+Loading the session and general session information.
+EDIT: This section had been updated to allow trendcalculations. Previously,the link between the index of collected ads and the ad details were calculated on the fly using the scans runtime and individual a ad's snapshot for each selected snapshot. This can be adjusted to grant these calculations prior to selecting the session. This will consolidate the master index to be using the composite key of SiteID + querytime. It makes sense to move this preprocessing to the session script. Or perhaps into a separate script. 
+```{r loading_the_data}
 AnalysisSessionID<-"JofogasLakasokBPFull_20180106_2236JF"
 AnalysisAdListFile<-"FullBudapestAdLists.Rda"
 AnalysisAdDetailListFile<-"Detailedhirdetes.Rda"
 
-AnalysisSessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
+SessionTableFile<-"SessionTable.Rda"
+AnalysisSessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
 AnalysisSessionRecord<-AnalysisSessionTable[AnalysisSessionTable$SessionID==AnalysisSessionID,]
 ForShowTable<-t(AnalysisSessionRecord)
 colnames(ForShowTable)<-c("Value")
@@ -108,9 +109,6 @@ Checking for duplicates reveals *`r nrow(n_occur[n_occur$Freq > 1,])`* a major e
 Since writing the following paragraph, I have realised that I could have used the SiteID+Price as composite keys and thus render it redundant regarding the problem discussed above, it does serve as a working solution for eliminating duplicates created for any other reason thereby increasing the robustness of the analysis. 
 
 In order to combat duplication , we could grab either the latest entry, or we could go for the entry that was online at the time of taking the snapsot. The latter has the advantage of rendering the data 'immutable', fixed.  To identify the relevant records, I cannot rely on any SessionIds as unchanged records would carry a prior scans' IDs. Luckily we have the timestamp of finishing the query and the query date of each record stored, with these piece of data, we can find the records that were created last or closest to the time of the snapshot while preceeding it.  Who knew playing safe and documenting everything could prove a venue for salvaging the project('s accuracy) against an unforseen issue? I did. I have been burnt before. A lot. 
-
-
-
 
 
 
@@ -545,8 +543,6 @@ AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariabl
 
 
 
-
-
 ```{r identifying_the_proper_IDs}
 rm(n_occur)
 AnalysisAdDetailList$Deviance<-ifelse(QueryEndTime-AnalysisAdDetailList$QueryTime>0,QueryEndTime-AnalysisAdDetailList$QueryTime,9999999999999)
@@ -570,9 +566,14 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Devi
 ```{r dropping_columns}
 AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicionalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos"))]
 
+exportedShinyFile<-"exportedversion.Rda"
+Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/")
 exportedShiny<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("RefNum","RC_Description"))]
+saveRDS(exportedShiny,paste(Shinyfolder,exportedShinyFile,sep="/"))
+file.copy(SessionTableFile,paste(Shinyfolder,SessionTableFile,sep="/"),overwrite = TRUE)
+file.copy(AnalysisAdListFile,paste(Shinyfolder,AnalysisAdListFile,sep="/"),overwrite = TRUE)
 
-saveRDS(exportedShiny,"exportedversion.Rda")
+rm(exportedShiny)
 
 ```
 
