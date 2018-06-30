@@ -27,7 +27,7 @@ AnalysisSessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
 AnalysisSessionTable$ResultNumber<-as.numeric(as.character(AnalysisSessionTable$ResultNumber))
 AnalysisSessionTable$ReceivedAds<-as.numeric(as.character(AnalysisSessionTable$ReceivedAds))
 
-Sessions<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>0 ,c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
+Sessions<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>0 & !is.na(AnalysisSessionTable$StartTime),c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
 Sessions$SessionID<-droplevels(Sessions$SessionID)
 ListofSnapshotIDs<-levels(Sessions$SessionID)
 TitleList<-levels(AnalysisAdDetailList$RC_Title)
@@ -36,6 +36,7 @@ ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
 #Sessions<-Sessions[with(Sessions, order(xtfrm(Sessions$StartTime)),decreasing=TRUE),]
 
 Sessions<-Sessions[order(Sessions$StartTime, decreasing = TRUE),]
+
 
 #Sessions$StartTime<-format(Sessions$StartTime,"%Y-%m-%d")
 #Sessions <-reactive({
@@ -47,6 +48,11 @@ Keruletek<-levels(AnalysisAdDetailList$Kerulet)
 
 sqMinSize<-min(AnalysisAdDetailList$MeretCleared)
 sqMaxSize<-max(AnalysisAdDetailList$MeretCleared)
+
+
+sqMinSnapTime<-min(Sessions$StartTime)
+sqMaxSnapTime<-max(Sessions$StartTime)
+
   AnalysisAdDetailList$MeretCleared
 print(dim(AnalysisAdDetailList))
 
@@ -67,7 +73,7 @@ ui<-dashboardPage(
       tabItem(tabName = "TabTechnical",
               fluidRow(
                 box(width=12,
-                    height=200,
+                  #  height=200,
               plotOutput("Snapshots"),
               solidHeader = TRUE,
               collapsible = TRUE,
@@ -131,7 +137,17 @@ ui<-dashboardPage(
               )
       ),
       tabItem(tabName = "Trends",
-              h2("Trends")
+              fluidRow(
+                box(width=12,
+                    title="Trends",
+                    solidHeader = TRUE,
+                    collapsible = FALSE,
+                    sliderInput("TimeRangeInput", "Time Range",
+                                min = sqMinSnapTime, max = sqMaxSnapTime,
+                                value = c(sqMinSnapTime, sqMaxSnapTime)
+                    )
+                    )
+              )
       ),
       tabItem(tabName = "About",
               fluidRow(
@@ -180,7 +196,9 @@ server <- function(input, output) {
   FilteredAdDetailList
   })
   observe({ print(paste("filtereddataset",dim(FilteredSnapSet())))})
-output$SessionTable <-renderTable({Sessions})
+  TempSessions<-Sessions
+  TempSessions$StartTime <- format(TempSessions$StartTime,'%Y-%m-%d')
+  output$SessionTable <-renderTable({TempSessions})
 
 output$Snapshots<- renderPlot({
   ggplot(data=Sessions,aes(x=StartTime))+
