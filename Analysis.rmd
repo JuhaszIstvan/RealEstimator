@@ -564,14 +564,32 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Devi
 
 
 ```{r dropping_columns}
-AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicionalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos"))]
+AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos"))]
 
 exportedShinyFile<-"exportedversion.Rda"
 Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/")
 exportedShiny<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("RefNum","RC_Description"))]
+
 saveRDS(exportedShiny,paste(Shinyfolder,exportedShinyFile,sep="/"))
-file.copy(SessionTableFile,paste(Shinyfolder,SessionTableFile,sep="/"),overwrite = TRUE)
-file.copy(AnalysisAdListFile,paste(Shinyfolder,AnalysisAdListFile,sep="/"),overwrite = TRUE)
+
+token <- readRDS("droptoken.rds")
+
+drop_upload(paste(Shinyfolder,exportedShinyFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
+  mute = FALSE, verbose = FALSE, dtoken = token)
+
+
+file.copy(SessionTableFile,Shinyfolder,overwrite = TRUE)
+drop_upload(paste(Shinyfolder,SessionTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
+  mute = FALSE, verbose = FALSE, dtoken = token)
+
+
+file.copy(AnalysisAdListFile,Shinyfolder,overwrite = TRUE)
+drop_upload(paste(Shinyfolder,AnalysisAdListFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
+  mute = FALSE, verbose = FALSE, dtoken = token)
+
+file.copy(AnalysisAdListFile,Shinyfolder,overwrite = TRUE)
+
+
 
 rm(exportedShiny)
 
