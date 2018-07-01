@@ -61,6 +61,7 @@ library(randomForest)
 library(gridExtra)
 library(modelr)
 library(stringi)
+library(lubridate)
 
 #library(RWeka)
 
@@ -95,7 +96,7 @@ knitr::kable(ForShowTable,format="html", pad=0)
 QueryEndTime<-AnalysisSessionRecord$QueryAdDetailEndTime
 AnalysisAdList<-readRDS(file=AnalysisAdListFile, refhook =NULL)
 AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
-AnalysisAdList<-AnalysisAdList[AnalysisAdList$SessionID==AnalysisSessionID,'SiteID']
+#AnalysisAdList<-AnalysisAdList[AnalysisAdList$SessionID==AnalysisSessionID,'SiteID']
 #AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% AnalysisAdList,]
 n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
 ```
@@ -143,7 +144,7 @@ It is unnecessary to keep Price in such a high digit.
 ```{r wrangling_Ar}
 AnalysisAdDetailList$RC_ArMil<-AnalysisAdDetailList$Ar/1000000
 #please add this back later on
-#AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
+AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
 ggplot(data = AnalysisAdDetailList) +
   geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
 ```
@@ -155,7 +156,7 @@ head(AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil),decreasing=
 ```{r wrangling_Ar3}
 Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,decreasing = T)),]
 
-#AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
+
 #AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$RC_ArMil<200&AnalysisAdDetailList$RC_ArMil>4,]
 ggplot(data = AnalysisAdDetailList) +
   geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
@@ -564,34 +565,48 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Devi
 
 
 ```{r dropping_columns}
-AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos"))]
+AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos","Latitude","Longitude"))]
 
-exportedShinyFile<-"exportedversion.Rda"
-Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/")
-exportedShiny<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("RefNum","RC_Description"))]
+#I had to push the filters and calculations here in order to fit into the RAM limits of the free tier of shinapps.io. 
+ShinySessionTableFile<-"ShinySessionTable.Rda" #the file name for exportedSessiontable
+ShinyAdListFile<-"ShinyAdlistTable.Rda" #the file name for exportedAdList 
+ShinyDetailTableFile<-"ShinyDetailTable.Rda" #the file name for exportedShiny
 
-saveRDS(exportedShiny,paste(Shinyfolder,exportedShinyFile,sep="/"))
+Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/") # the location of the Shiny App
 
+#Pre-processing the sessions' table ----
+exportedSessiontable<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>15000 & AnalysisSessionTable$ReceivedAds>15000 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
+exportedSessiontable<-exportedSessiontable[order(exportedSessiontable$StartTime, decreasing = TRUE),]
+
+exportedSessiontable$StartTimeStarter<-as.POSIXct(ifelse(hour(exportedSessiontable$StartTime)<11,ceiling_date(exportedSessiontable$StartTime-days(1),unit = "day",change_on_boundary=FALSE)-seconds(1) ,exportedSessiontable$StartTime),origin="1970-01-01",tz="Europe/Budapest")
+exportedSessiontable$SnapshotDate<-as.Date(exportedSessiontable$StartTimeStarter,tz="Europe/Budapest")
+
+exportedSessiontable<-exportedSessiontable[!duplicated(exportedSessiontable$SnapshotDate),] #multiple- single day Sessions
+#Preprocessing the AdList table ----
+
+exportedAdList<-exportedAdList[(exportedAdList$SessionID %in% exportedSessiontable$SessionID),] # dropping unreported Ads
+exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime")]
+exportedAdList<-merge(x=exportedAdList,y=exportedSessiontable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
+
+#Preprocessing the AdDetails table ----
+exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared"))]
+
+exportedAdList<-merge(x=exportedAdList,y=exportedShiny,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
+
+saveRDS(exportedSessiontable,paste(Shinyfolder,ShinySessionTableFile,sep="/"))
+saveRDS(exportedAdList,paste(Shinyfolder,ShinyAdListFile,sep="/"))
+saveRDS(exportedShiny,paste(Shinyfolder,ShinyDetailTableFile,sep="/"))
+
+
+#Uploading to drop-box ----
+library(rdrop2)
 token <- readRDS("droptoken.rds")
 
-drop_upload(paste(Shinyfolder,exportedShinyFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
-  mute = FALSE, verbose = FALSE, dtoken = token)
+drop_upload(paste(Shinyfolder,ShinySessionTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
 
+drop_upload(paste(Shinyfolder,ShinyAdListFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
 
-file.copy(SessionTableFile,Shinyfolder,overwrite = TRUE)
-drop_upload(paste(Shinyfolder,SessionTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
-  mute = FALSE, verbose = FALSE, dtoken = token)
-
-
-file.copy(AnalysisAdListFile,Shinyfolder,overwrite = TRUE)
-drop_upload(paste(Shinyfolder,AnalysisAdListFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,
-  mute = FALSE, verbose = FALSE, dtoken = token)
-
-file.copy(AnalysisAdListFile,Shinyfolder,overwrite = TRUE)
-
-
-
-rm(exportedShiny)
+drop_upload(paste(Shinyfolder,ShinyDetailTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
 
 ```
 
