@@ -31,7 +31,7 @@ AnalysisSessionTable$ReceivedAds<-as.integer(as.character(AnalysisSessionTable$R
 #let's rebuild him
 
 # Pushed back to Analysis.R   Sessions<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>0 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
-Sessions<-AnalysisSessionTable # added when the subsetting # Pushed back to Analysis.R 
+Sessions<-AnalysisSessionTable[!is.na(AnalysisSessionTable$SessionID),] # added when the subsetting # Pushed back to Analysis.R 
 Sessions$SessionID<-droplevels(Sessions$SessionID) # Probably unnecessary
 ListofSnapshotIDs<-levels(Sessions$SessionID)
 TitleList<-levels(AnalysisAdList$RC_Title)
@@ -49,8 +49,8 @@ sqMinSize<-min(AnalysisAdList$MeretCleared)
 sqMaxSize<-max(AnalysisAdList$MeretCleared)
 
 
-sqMinSnapTime<-min(Sessions$StartTime, na.rm=TRUE)
-sqMaxSnapTime<-max(Sessions$StartTime,na.rm=TRUE)
+sqMinSnapTime<-min(Sessions$SnapshotDate, na.rm=TRUE)
+sqMaxSnapTime<-max(Sessions$SnapshotDate,na.rm=TRUE)
 
 
 print(dim(AnalysisAdList))
@@ -61,7 +61,7 @@ ui<-dashboardPage(
   dashboardSidebar(
     sidebarMenu(
       menuItem("Filters - TrendLines", tabName = "Trends", icon = icon("th"),badgeLabel ="WIP",badgeColor = "yellow"),
-      menuItem("Filters(2) - Snapshot", tabName = "Singlesnapshot", icon = icon("th")),
+      menuItem("Filters(2) - Snapshot", tabName = "Singlesnapshot", icon = icon("th"),badgeLabel ="to be deleted",badgeColor = "black"),
       menuItem("Data Quality", tabName = "TabTechnical", icon = icon("dashboard")),
       menuItem("About", tabName = "About", icon = icon("th"))
     )
@@ -137,7 +137,7 @@ ui<-dashboardPage(
                     collapsible = FALSE,
                     sliderInput("InputSnapTimeRange", label=NULL,
                                 min = sqMinSnapTime, max = sqMaxSnapTime,
-                                value = c(sqMinSnapTime, sqMaxSnapTime)
+                                value = c(sqMaxSnapTime, sqMaxSnapTime)
                     )
                     )
                 ),
@@ -158,11 +158,11 @@ ui<-dashboardPage(
                     solidHeader = TRUE,
                     collapsible = TRUE,
                     sliderInput("PriceSlider", "Price Range",
-                                min = 0, max = 1000,
+                                min = 5, max = 1000,
                                 value = c(0, 200), post=" million"
                     ),
                     sliderInput("floorInput", "Floor Size",
-                                min = 0, max = 1000,
+                                min = 20, max = 1000,
                                 value = c(0, 1000), post=" m2"
                     )
                 )
@@ -190,10 +190,10 @@ ui<-dashboardPage(
               fluidRow(
                 box(
                   width=12,
-                  title="Chart goes here but it is Temporarily Disabled. ",
+                  title="Selection Preview",
                   solidHeader=TRUE,
-                  collapsible=TRUE
-                  #plotOutput("PriceBoxPlot")
+                  collapsible=TRUE,
+                  plotOutput("PriceBoxPlot")
                 )
               )
       ),
@@ -228,8 +228,10 @@ server <- function(input, output) {
 #  })
   
   FilteredSnapShots<-reactive({
-    Sessions[Sessions$StartTime >= input$InputSnapTimeRange[1] & Sessions$StartTime<=input$InputSnapTimeRange[2],]
+    Sessions[Sessions$SnapshotDate >= input$InputSnapTimeRange[1] & Sessions$SnapshotDate<=input$InputSnapTimeRange[2],,drop=F]
   })
+  observe({ print(paste(input$InputSnapTimeRange[1],input$InputSnapTimeRange[2])) })
+  
   
   RangedDataSet<-reactive({
     # Pushed back to Analysis.R TempSet<-AnalysisAdList[AnalysisAdList$SessionID %in% FilteredSnapShots()$SessionID,c("SiteID","SessionID","QueryTime")]
@@ -264,7 +266,7 @@ server <- function(input, output) {
   #QueryEndTime<-reactive({
   #  AnalysisSessionTable[AnalysisSessionTable$SessionID==input$SnapshotImput,'QueryAdDetailEndTime']
   #  })
-  #observe({ print(QueryEndTime()) })
+
   
 #  FilteredSnapSet<-reactive({
   #AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
@@ -279,22 +281,23 @@ server <- function(input, output) {
   #})
   #observe({ print(paste("filtereddataset",class(FilteredRangedDataSet()$QueryTime)))})
   TempSessions<-Sessions
-  TempSessions$StartTime <- format(TempSessions$StartTime,'%Y-%m-%d')
+  TempSessions$SnapshotDate <- format(TempSessions$SnapshotDate,'%Y-%m-%d')
+  TempSessions<-TempSessions[,c("SessionID","SnapshotDate","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
   output$SessionTable <-renderTable({TempSessions})
 
-#output$Snapshots<- renderPlot({
-#  ggplot(data=Sessions,aes(x=StartTime))+
-#    geom_line(aes(y=ResultNumber,group=1,colour="Ads reported"))+
-#    geom_line(aes(y=ReceivedAds,group=2, colour="Ads collected"))+
-#    scale_x_datetime(name = 'Snapshot Date')+
-#    xlab("Snapshot date")
-#})
+output$Snapshots<- renderPlot({
+  ggplot(data=Sessions,aes(x=StartTime))+
+    geom_line(aes(y=ResultNumber,group=1,colour="Ads reported"))+
+    geom_line(aes(y=ReceivedAds,group=2, colour="Ads collected"))+
+    scale_x_datetime(name = 'Snapshot Date')+
+    xlab("Snapshot date")
+})
 
-#output$PriceBoxPlot <- renderPlot({
-#  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = SnapshotDate, y = RC_ArMil, group= SnapshotDate)) + 
-#    scale_x_date(name = 'SnapshotDate') +
-#    geom_boxplot()
-#})
+output$PriceBoxPlot <- renderPlot({
+  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = SnapshotDate, y = RC_ArMil, group= SnapshotDate)) + 
+    scale_x_date(name = 'SnapshotDate') +
+    geom_boxplot()
+})
 
 
 #output$PriceHistogram <- renderPlot({
@@ -307,7 +310,7 @@ server <- function(input, output) {
 #    geom_bar(mapping = aes(x = Kerulet), fill='orange')
 #})
 
-#output$FilteredTable <-renderTable({head(FilteredRangedDataSet())})
+output$FilteredTable <-renderTable({head(FilteredRangedDataSet())})
 
 }
 shinyApp(ui = ui, server = server)
