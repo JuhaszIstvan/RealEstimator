@@ -1,5 +1,5 @@
 library(shiny)
-library(dplyr)
+#library(dplyr)
 library(rdrop2)
 library(ggplot2)
 library(shinydashboard)
@@ -7,63 +7,62 @@ library(shinydashboard)
 token <- readRDS("droptoken.rds")
 drop_acc(dtoken = token)
 
+AnalysisAdDetailListFile<-"ShinyDetailTable.Rda"
 
-AnalysisAdDetailListFile<-"exportedversion.Rda"
 if (!file.exists(AnalysisAdDetailListFile)) {
-  drop_download(AnalysisAdDetailListFile,overwrite = TRUE)}
+#  drop_download(AnalysisAdDetailListFile,overwrite = TRUE)
+  }
+#AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
 
-AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
-
-AnalysisAdListFile<-"FullBudapestAdLists.Rda"
+AnalysisAdListFile<-"ShinyAdlistTable.Rda"
 if (!file.exists(AnalysisAdListFile)) {
-  drop_download(AnalysisAdListFile,overwrite = TRUE)}
+  drop_download(AnalysisAdListFile,overwrite = TRUE)
+  }
 AnalysisAdList<-readRDS(file=AnalysisAdListFile, refhook =NULL)
 
 
-SessionTableFile<-"SessionTable.Rda"
+SessionTableFile<-"ShinySessionTable.Rda"
 if (!file.exists(SessionTableFile)) {
   drop_download(SessionTableFile,overwrite = TRUE)}
-AnalysisSessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
-AnalysisSessionTable$ResultNumber<-as.numeric(as.character(AnalysisSessionTable$ResultNumber))
-AnalysisSessionTable$ReceivedAds<-as.numeric(as.character(AnalysisSessionTable$ReceivedAds))
+AnalysisSessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
+AnalysisSessionTable$ResultNumber<-as.integer(as.character(AnalysisSessionTable$ResultNumber))
+AnalysisSessionTable$ReceivedAds<-as.integer(as.character(AnalysisSessionTable$ReceivedAds))
 
-Sessions<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>0 & !is.na(AnalysisSessionTable$StartTime),c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
-Sessions$SessionID<-droplevels(Sessions$SessionID)
+#let's rebuild him
+
+# Pushed back to Analysis.R   Sessions<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>0 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
+Sessions<-AnalysisSessionTable # added when the subsetting # Pushed back to Analysis.R 
+Sessions$SessionID<-droplevels(Sessions$SessionID) # Probably unnecessary
 ListofSnapshotIDs<-levels(Sessions$SessionID)
-TitleList<-levels(AnalysisAdDetailList$RC_Title)
+TitleList<-levels(AnalysisAdList$RC_Title)
 ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
-#Sessions<-Sessions[order(xtfrm(Sessions$StartTime),desc=T ),, drop = FALSE]
-#Sessions<-Sessions[with(Sessions, order(xtfrm(Sessions$StartTime)),decreasing=TRUE),]
+#Sessions<-Sessions[order(xtfrm(Sessions$StartTime),desc=T ),, drop = FALSE] # candidate for deletion
+#Sessions<-Sessions[with(Sessions, order(xtfrm(Sessions$StartTime)),decreasing=TRUE),] # candidate for deletion
 
-Sessions<-Sessions[order(Sessions$StartTime, decreasing = TRUE),]
-
+# Pushed back to Analysis.R  Sessions<-Sessions[order(Sessions$StartTime, decreasing = TRUE),] 
 
 #Sessions$StartTime<-format(Sessions$StartTime,"%Y-%m-%d")
-#Sessions <-reactive({
-#  AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull",c("ResultNumber","StartTime","ReceivedAds","NewAdNumber","ClosedAdNumber")]
-#})
-print(dim(Sessions))
 
-Keruletek<-levels(AnalysisAdDetailList$Kerulet)
+Keruletek<-levels(AnalysisAdList$Kerulet)
 
-sqMinSize<-min(AnalysisAdDetailList$MeretCleared)
-sqMaxSize<-max(AnalysisAdDetailList$MeretCleared)
+sqMinSize<-min(AnalysisAdList$MeretCleared)
+sqMaxSize<-max(AnalysisAdList$MeretCleared)
 
 
-sqMinSnapTime<-min(Sessions$StartTime)
-sqMaxSnapTime<-max(Sessions$StartTime)
+sqMinSnapTime<-min(Sessions$StartTime, na.rm=TRUE)
+sqMaxSnapTime<-max(Sessions$StartTime,na.rm=TRUE)
 
-  AnalysisAdDetailList$MeretCleared
-print(dim(AnalysisAdDetailList))
+
+print(dim(AnalysisAdList))
 
 
 ui<-dashboardPage(
-  dashboardHeader(title = "RealEstimator dashboard"),
+  dashboardHeader(title = "RealEstimator dashboard - WIP"),
   dashboardSidebar(
     sidebarMenu(
-      menuItem("Filters - Snapshot", tabName = "Singlesnapshot", icon = icon("th")),
-      menuItem("Trends", tabName = "Trends", icon = icon("th"),badgeLabel ="inactive",badgeColor = "black"),
-      menuItem("Technical", tabName = "TabTechnical", icon = icon("dashboard")),
+      menuItem("Filters - TrendLines", tabName = "Trends", icon = icon("th"),badgeLabel ="WIP",badgeColor = "yellow"),
+      menuItem("Filters(2) - Snapshot", tabName = "Singlesnapshot", icon = icon("th")),
+      menuItem("Data Quality", tabName = "TabTechnical", icon = icon("dashboard")),
       menuItem("About", tabName = "About", icon = icon("th"))
     )
   ),
@@ -110,43 +109,92 @@ ui<-dashboardPage(
                               selected=Keruletek
                               )
                   ),
-                box(width=4,
-                    solidHeader = TRUE,
-                    height = 150,
-                sliderInput("floorInput", "Floor Size",
-                            min = sqMinSize, max = 1000,
-                            value = c(sqMinSize, 1000), post=" m2"
-                            )
-                ),
                 box(width=3,
                     solidHeader = TRUE,
-                    height = 150,
-                    selectInput("TitleInput", "Kerulet",choices = TitleList,multiple = TRUE,selected="Title_Ownership")
+                    height = 150
+   #                 selectInput("TitleInput", "Kerulet",choices = TitleList,multiple = TRUE,selected="Title_Ownership")
                 )
                 ),
               fluidRow(
               box(title = "Price Histogram",
                   status = "primary",
-                  width=6,
-                  plotOutput("PriceHistogram", height = 200))
+                  width=6
+ #                  plotOutput("PriceHistogram", height = 200)
+ )
               ,
                 box(title = "District volume",
                     status = "primary",
-                    width=6,
-                    plotOutput("KeruletDiagram", height = 200))
+                    width=6
+    #                plotOutput("KeruletDiagram", height = 200)
+    )
               )
       ),
-      tabItem(tabName = "Trends",
+      tabItem(tabName = "Trends",title="The data is subsetted on site, please be patient while it loads",
               fluidRow(
                 box(width=12,
-                    title="Trends",
+                    title="Time Range",
                     solidHeader = TRUE,
                     collapsible = FALSE,
-                    sliderInput("TimeRangeInput", "Time Range",
+                    sliderInput("InputSnapTimeRange", label=NULL,
                                 min = sqMinSnapTime, max = sqMaxSnapTime,
                                 value = c(sqMinSnapTime, sqMaxSnapTime)
                     )
                     )
+                ),
+                fluidRow(
+                  box(solidHeader = TRUE,
+                      collapsible = TRUE,
+                checkboxGroupInput("InputRangeTitleGroupCheck", label=NULL, choices = TitleList, selected = TitleList,
+                                   inline = FALSE)
+                  ),
+                box(solidHeader = TRUE,
+                    collapsible = TRUE,
+                    checkboxGroupInput("InputRangeKeruletGroupCheck", label=NULL, choices = Keruletek, selected = Keruletek,
+                                       inline = TRUE)
+                )
+                ),
+              fluidRow(
+                box(width=12,
+                    solidHeader = TRUE,
+                    collapsible = TRUE,
+                    sliderInput("PriceSlider", "Price Range",
+                                min = 0, max = 1000,
+                                value = c(0, 200), post=" million"
+                    ),
+                    sliderInput("floorInput", "Floor Size",
+                                min = 0, max = 1000,
+                                value = c(0, 1000), post=" m2"
+                    )
+                )
+                ),
+                fluidRow(
+                box(
+                  width=12,
+                  title="Selection Information",
+                  solidHeader=TRUE,
+                  collapsible=TRUE,
+                  infoBoxOutput("NumberofSelectedSnapshots"),
+                  infoBoxOutput("NumberofSelectedAds"),
+                  infoBoxOutput("NumberofFilteredAds")
+                  )
+                ),
+                fluidRow(
+                  box(
+                    width=12,
+                    title="Selection Top 5",
+                    solidHeader=TRUE,
+                    collapsible=TRUE,
+                    tableOutput("FilteredTable")
+                  )
+                ),
+              fluidRow(
+                box(
+                  width=12,
+                  title="Chart goes here but it is Temporarily Disabled. ",
+                  solidHeader=TRUE,
+                  collapsible=TRUE
+                  #plotOutput("PriceBoxPlot")
+                )
               )
       ),
       tabItem(tabName = "About",
@@ -170,61 +218,96 @@ ui<-dashboardPage(
 )
 
 server <- function(input, output) {
-  filtered <-reactive({
-    FilteredSnapSet() %>%
-    filter(MeretCleared >= input$floorInput[1],
-           MeretCleared <= input$floorInput[2],
-           RC_Title == input$TitleInput,
-           Kerulet == input$KeruletInput
-    )
-  })
-  QueryEndTime<-reactive({
-    AnalysisSessionTable[AnalysisSessionTable$SessionID==input$SnapshotImput,'QueryAdDetailEndTime']
-    })
-  observe({ print(QueryEndTime()) })
+#  filtered <-reactive({
+#    FilteredSnapSet() %>%
+#    filter(MeretCleared >= input$floorInput[1],
+#           MeretCleared <= input$floorInput[2],
+#           RC_Title == input$TitleInput,
+#           Kerulet == input$KeruletInput
+#    )
+#  })
   
-  FilteredSnapSet<-reactive({
-  #AnalysisAdList
-  #AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
-  FilteredAdList<-AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
-  #FilteredAdList
-  FilteredAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% FilteredAdList,]
-  FilteredAdDetailList$Deviance<-ifelse(QueryEndTime()-FilteredAdDetailList$QueryTime>0,QueryEndTime()-FilteredAdDetailList$QueryTime,9999999999999)
-  FilteredAdDetailList<-FilteredAdDetailList[with(FilteredAdDetailList, order(Deviance)),]
-  FilteredAdDetailList<-FilteredAdDetailList[!duplicated(FilteredAdDetailList$SiteID),]
-  #AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
-  FilteredAdDetailList
+  FilteredSnapShots<-reactive({
+    Sessions[Sessions$StartTime >= input$InputSnapTimeRange[1] & Sessions$StartTime<=input$InputSnapTimeRange[2],]
   })
-  observe({ print(paste("filtereddataset",dim(FilteredSnapSet())))})
+  
+  RangedDataSet<-reactive({
+    # Pushed back to Analysis.R TempSet<-AnalysisAdList[AnalysisAdList$SessionID %in% FilteredSnapShots()$SessionID,c("SiteID","SessionID","QueryTime")]
+    AnalysisAdList[AnalysisAdList$SessionID %in% FilteredSnapShots()$SessionID,] # Added after the above line was # Pushed back to Analysis.R
+    # Pushed back to Analysis.R TempSet<-merge(x=TempSet,y=Sessions[,c("SessionID","StartTime")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
+    # Pushed back to Analysis.R TempSet<-merge(x=TempSet,y=AnalysisAdDetailList,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
+    # Pushed back to Analysis.R TempSet$SnapshotDate<-as.Date(TempSet$StartTime)
+    })
+  
+  FilteredRangedDataSet<-reactive({
+    RangedDataSet()[RangedDataSet()$RC_Title %in% input$InputRangeTitleGroupCheck & RangedDataSet()$Kerulet %in% input$InputRangeKeruletGroupCheck & RangedDataSet()$MeretCleared >= input$floorInput[1] & RangedDataSet()$MeretCleared <= input$floorInput[2] & RangedDataSet()$RC_ArMil >= input$PriceSlider[1] & RangedDataSet()$RC_ArMil <= input$PriceSlider[2],]
+  })
+  
+  
+  output$NumberofSelectedSnapshots <- renderInfoBox({
+    infoBox(
+      "Snapshots", nrow(FilteredSnapShots()), icon = icon("list"),
+      color = "purple"
+    )})
+  output$NumberofSelectedAds <- renderInfoBox({
+    infoBox(
+      "Ads", nrow(RangedDataSet()), icon = icon("list"),
+      color = "orange"
+    )})
+  output$NumberofFilteredAds <- renderInfoBox({
+    infoBox(
+      "Filtered", nrow(FilteredRangedDataSet()), icon = icon("list"),
+      color = "blue"
+    )})
+  
+
+  #QueryEndTime<-reactive({
+  #  AnalysisSessionTable[AnalysisSessionTable$SessionID==input$SnapshotImput,'QueryAdDetailEndTime']
+  #  })
+  #observe({ print(QueryEndTime()) })
+  
+#  FilteredSnapSet<-reactive({
+  #AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
+ # FilteredAdList<-AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
+  #FilteredAdList
+  #FilteredAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% FilteredAdList,]
+  #FilteredAdDetailList$Deviance<-ifelse(QueryEndTime()-FilteredAdDetailList$QueryTime>0,QueryEndTime()-FilteredAdDetailList$QueryTime,9999999999999)
+  #FilteredAdDetailList<-FilteredAdDetailList[with(FilteredAdDetailList, order(Deviance)),]
+  #FilteredAdDetailList<-FilteredAdDetailList[!duplicated(FilteredAdDetailList$SiteID),]
+  #AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
+  #FilteredAdDetailList
+  #})
+  #observe({ print(paste("filtereddataset",class(FilteredRangedDataSet()$QueryTime)))})
   TempSessions<-Sessions
   TempSessions$StartTime <- format(TempSessions$StartTime,'%Y-%m-%d')
   output$SessionTable <-renderTable({TempSessions})
 
-output$Snapshots<- renderPlot({
-  ggplot(data=Sessions,aes(x=StartTime))+
-    geom_line(aes(y=ResultNumber,group=1,colour="Ads reported"))+
-    geom_line(aes(y=ReceivedAds,group=2, colour="Ads collected"))+
-    scale_x_datetime(name = 'Snapshot Date')+
-    xlab("Snapshot date")
-})
+#output$Snapshots<- renderPlot({
+#  ggplot(data=Sessions,aes(x=StartTime))+
+#    geom_line(aes(y=ResultNumber,group=1,colour="Ads reported"))+
+#    geom_line(aes(y=ReceivedAds,group=2, colour="Ads collected"))+
+#    scale_x_datetime(name = 'Snapshot Date')+
+#    xlab("Snapshot date")
+#})
+
+#output$PriceBoxPlot <- renderPlot({
+#  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = SnapshotDate, y = RC_ArMil, group= SnapshotDate)) + 
+#    scale_x_date(name = 'SnapshotDate') +
+#    geom_boxplot()
+#})
 
 
-output$PriceHistogram <- renderPlot({
-  ggplot(filtered(), aes(RC_ArMil)) +
-    geom_histogram()
-})
+#output$PriceHistogram <- renderPlot({
+#  ggplot(filtered(), aes(RC_ArMil)) +
+#    geom_histogram()
+#})
 
-output$KeruletDiagram <- renderPlot({
-  ggplot(data=filtered())+
-    geom_bar(mapping = aes(x = Kerulet), fill='orange')
-})
+#output$KeruletDiagram <- renderPlot({
+#  ggplot(data=filtered())+
+#    geom_bar(mapping = aes(x = Kerulet), fill='orange')
+#})
 
-
-#pCT<-ggplot(data = TrainingSet, mapping = aes(x = RC_Title, y = RC_ArMil)) + 
-#  geom_boxplot() +
-#  coord_cartesian(ylim = c(0, 100))
-
-
+#output$FilteredTable <-renderTable({head(FilteredRangedDataSet())})
 
 }
 shinyApp(ui = ui, server = server)
