@@ -261,7 +261,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
     ResultNumber<<-totáltalálat_kesz
   } else {totáltalálat_kesz<- -9999}
     SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
-    SessionTable[SessionTable$SessionID==SessionID,"ResultNumber"]<-totáltalálat_kesz
+    SessionTable[SessionTable$SessionID==SessionID,"ResultNumber"]<-as.integer(as.character(totáltalálat_kesz))
     saveRDS(SessionTable, file="SessionTable.Rda")
   
   rm(vége)          #cleanup
