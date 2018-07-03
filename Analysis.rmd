@@ -375,6 +375,8 @@ templevels<-levels(AnalysisAdDetailList[[tempvariablename]])
 AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
 AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"State_NotSpecified"
 AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="Új",newvariablename]<-"Új_építésű"
+AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="Új építésű",newvariablename]<-"Új_építésű"
+AnalysisAdDetailList[AnalysisAdDetailList[newvariablename]=="Jó állapotú",newvariablename]<-"Jó_állapotú"
 AnalysisAdDetailList[[newvariablename]]<-as.factor(AnalysisAdDetailList[[newvariablename]])
 
 knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
@@ -567,35 +569,42 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Devi
 ```{r dropping_columns}
 AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos","Latitude","Longitude"))]
 
+```
+
+```{r Exporting_to_Shiny}
 #I had to push the filters and calculations here in order to fit into the RAM limits of the free tier of shinapps.io. 
-ShinySessionTableFile<-"ShinySessionTable.Rda" #the file name for exportedSessiontable
+ShinySessionTableFile<-"ShinySessionTable.Rda" #the file name for exportedSessionTable
 ShinyAdListFile<-"ShinyAdlistTable.Rda" #the file name for exportedAdList 
 ShinyDetailTableFile<-"ShinyDetailTable.Rda" #the file name for exportedShiny
 
 Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/") # the location of the Shiny App
 
 #Pre-processing the sessions' table ----
-exportedSessiontable<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>15000 & AnalysisSessionTable$ReceivedAds>15000 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
-exportedSessiontable<-exportedSessiontable[order(exportedSessiontable$StartTime, decreasing = TRUE),]
 
-exportedSessiontable$StartTimeStarter<-as.POSIXct(ifelse(hour(exportedSessiontable$StartTime)<11,ceiling_date(exportedSessiontable$StartTime-days(1),unit = "day",change_on_boundary=FALSE)-seconds(1) ,exportedSessiontable$StartTime),origin="1970-01-01",tz="Europe/Budapest")
-exportedSessiontable$SnapshotDate<-as.Date(exportedSessiontable$StartTimeStarter,tz="Europe/Budapest")
+exportedSessionTable<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>15000 & AnalysisSessionTable$ReceivedAds>15000 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
 
-exportedSessiontable<-exportedSessiontable[!duplicated(exportedSessiontable$SnapshotDate),] #multiple- single day Sessions
+exportedSessionTable<-exportedSessionTable[order(exportedSessionTable$StartTime, decreasing = TRUE),]
+
+exportedSessionTable$StartTimeStarter<-as.POSIXct(ifelse(hour(exportedSessionTable$StartTime)<11,ceiling_date(exportedSessionTable$StartTime-days(1),unit = "day",change_on_boundary=FALSE)-seconds(1) ,exportedSessionTable$StartTime),origin="1970-01-01",tz="Europe/Budapest")
+exportedSessionTable$SnapshotDate<-as.Date(exportedSessionTable$StartTimeStarter,tz="Europe/Budapest")
+exportedSessionTable$StartTimeStarter<-NULL
+exportedSessionTable$MissRatePercent<-round(((exportedSessionTable$ResultNumber-exportedSessionTable$ReceivedAds)/exportedSessionTable$ResultNumber)*100,2)
+exportedSessionTable<-exportedSessionTable[!duplicated(exportedSessionTable$SnapshotDate),] #multiple- single day Sessions
 #Preprocessing the AdList table ----
 
-exportedAdList<-exportedAdList[(exportedAdList$SessionID %in% exportedSessiontable$SessionID),] # dropping unreported Ads
+exportedAdList<-AnalysisAdList[(AnalysisAdList$SessionID %in% exportedSessionTable$SessionID),] # dropping unreported Ads
 exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime")]
-exportedAdList<-merge(x=exportedAdList,y=exportedSessiontable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
+exportedAdList<-merge(x=exportedAdList,y=exportedSessionTable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
 
 #Preprocessing the AdDetails table ----
-exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared"))]
+exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared","RC_Condition","RC_Heating","RC_Material"))]
 
 exportedAdList<-merge(x=exportedAdList,y=exportedShiny,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
 
-saveRDS(exportedSessiontable,paste(Shinyfolder,ShinySessionTableFile,sep="/"))
+saveRDS(exportedSessionTable,paste(Shinyfolder,ShinySessionTableFile,sep="/"))
 saveRDS(exportedAdList,paste(Shinyfolder,ShinyAdListFile,sep="/"))
-saveRDS(exportedShiny,paste(Shinyfolder,ShinyDetailTableFile,sep="/"))
+#Unnecessary, candidate for deletion saveRDS(exportedShiny,paste(Shinyfolder,ShinyDetailTableFile,sep="/")) 
+
 
 
 #Uploading to drop-box ----
@@ -604,9 +613,9 @@ token <- readRDS("droptoken.rds")
 
 drop_upload(paste(Shinyfolder,ShinySessionTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
 
-drop_upload(paste(Shinyfolder,ShinyAdListFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
+drop_upload(paste(Shinyfolder,ShinyAdListFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token) 
 
-drop_upload(paste(Shinyfolder,ShinyDetailTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token)
+#Unnecessary, candidate for deletion drop_upload(paste(Shinyfolder,ShinyDetailTableFile,sep="/"), path = NULL, mode = "overwrite", autorename = TRUE,  mute = FALSE, verbose = FALSE, dtoken = token) 
 
 ```
 
