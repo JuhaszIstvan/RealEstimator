@@ -340,7 +340,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
         CheckUrl<-következő_oldal_link
         if(length(CheckUrl)==0) #if it doesnt exist, conclude that we are at the last page
         {
-          cat("No new URL available")
+          cat("No new URL is available")
           break
         }
         #randomised delay to avoid triggering spam protection 
@@ -361,7 +361,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
         return(masszlista)
         }
       else
-      {cat("ERROR: the return table isempty")
+      {cat("ERROR: The Return table is empty")
         return("ERROR: The Return table is empty")}
     }
 }
@@ -447,12 +447,12 @@ if(!exists("CheckUrl")){
   ProjectCurrentAdList<-MapAds(CheckUrl = CheckUrl,SessionID = SessionID,ProjectName=ProjectName)
 #The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done. 
 #Update:The file names are stored and retrieved from the SessionTables instead
-  ProjectCurrentAdListFile<-paste(getwd(),"/BackUp/",SessionID,"_SUMM.Rda",sep='')
+  ProjectCurrentAdListFile<-paste(getwd(),"/BackUp/",SessionID,"_CurrentAdList.Rda",sep='')
   saveRDS(ProjectCurrentAdList, file=ProjectCurrentAdListFile)
 
   #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
   ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
-  file.copy(ProjectAdListFile, paste(getwd(),"/BackUp/",ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
+  file.copy(ProjectAdListFile, paste(getwd(),"/BackUp/",ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup",sep=''))
   
   ProjectAdList<-merge(ProjectAdList,ProjectCurrentAdList,all=TRUE)
   saveRDS(ProjectAdList, file=ProjectAdListFile)
@@ -1117,7 +1117,7 @@ for(b in 1:length(CoordinateCurrentTable$Latitude)){
   if(is.na(CoordinateCurrentTable[b,'Zip'])){
     k<-k+1
     for(G in 1:maxattempts){
-      cat(paste("\n",k,'\\' ,TotalNum," Attpt ",G,'|',CoordinateCurrentTable$Longitude[b]," ",CoordinateCurrentTable$Latitude[b],sep=""))
+      cat(paste("\n",k,'\\' ,TotalNum," Attpt ",G,'|',CoordinateCurrentTable$Longitude[b]," ",CoordinateCurrentTable$Latitude[b], " : ",sep=""))
       result = tryCatch({
         revgeocode(c(as.numeric(CoordinateCurrentTable$Longitude[b]),as.numeric(CoordinateCurrentTable$Latitude[b])), output = "all",override_limit=TRUE,messaging = FALSE)
       }, warning = function(warning_message) {
@@ -1133,7 +1133,7 @@ for(b in 1:length(CoordinateCurrentTable$Latitude)){
         cat(" Result is no good, Boss")}
       Sys.sleep(2)
       if(G==maxattempts){
-        stop("Attempts have exceeded the predefined limit.")
+        stop("The number of attempts has reached the predefined limit.")
       }
     }
     if(!is.null(result)){
