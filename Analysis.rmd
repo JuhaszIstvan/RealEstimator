@@ -597,7 +597,7 @@ exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime")]
 exportedAdList<-merge(x=exportedAdList,y=exportedSessionTable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
 
 #Preprocessing the AdDetails table ----
-exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared","RC_Condition","RC_Heating","RC_Material"))]
+exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared","RC_Condition","RC_Heating","RC_FLOOR","RC_Material","RC_PARKING"))]
 
 exportedAdList<-merge(x=exportedAdList,y=exportedShiny,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
 
