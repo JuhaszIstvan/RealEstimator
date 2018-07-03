@@ -35,6 +35,9 @@ Sessions<-AnalysisSessionTable[!is.na(AnalysisSessionTable$SessionID),] # added 
 Sessions$SessionID<-droplevels(Sessions$SessionID) # Probably unnecessary
 ListofSnapshotIDs<-levels(Sessions$SessionID)
 TitleList<-levels(AnalysisAdList$RC_Title)
+ConditionList<-levels(AnalysisAdList$RC_Condition)
+MaterialList<-levels(AnalysisAdList$RC_Material)
+HeatingList<-levels(AnalysisAdList$RC_Heating)
 ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
 #Sessions<-Sessions[order(xtfrm(Sessions$StartTime),desc=T ),, drop = FALSE] # candidate for deletion
 #Sessions<-Sessions[with(Sessions, order(xtfrm(Sessions$StartTime)),decreasing=TRUE),] # candidate for deletion
@@ -59,12 +62,55 @@ print(dim(AnalysisAdList))
 ui<-dashboardPage(
   dashboardHeader(title = "RealEstimator dashboard - WIP"),
   dashboardSidebar(
+    width=350,
     sidebarMenu(
       menuItem("Filters - TrendLines", tabName = "Trends", icon = icon("th"),badgeLabel ="WIP",badgeColor = "yellow"),
-      menuItem("Filters(2) - Snapshot", tabName = "Singlesnapshot", icon = icon("th"),badgeLabel ="to be deleted",badgeColor = "black"),
+      menuItem("Cross Section Charts", tabName = "Charts", icon = icon("th"),badgeLabel ="WIP",badgeColor = "orange"),
       menuItem("Data Quality", tabName = "TabTechnical", icon = icon("dashboard")),
       menuItem("About", tabName = "About", icon = icon("th"))
+    ),
+    fluidRow(
+      box(width=12,
+          background="black",
+          solidHeader = TRUE,
+          collapsible = TRUE,
+          sliderInput("PriceSlider", "Price Range",
+                      min = 5, max = 1000,
+                      value = c(0, 200), post=" million"
+          ),
+          sliderInput("floorInput", "Floor Size",
+                      min = 20, max = 1000,
+                      value = c(0, 1000), post=" m2"
+          )
+      )
     )
+    ,
+    fluidRow(
+    box(width=12,
+        background="black",
+        collapsible = TRUE,
+    box(solidHeader = TRUE,
+        #collapsible = TRUE,
+        background="black",
+        width=8,
+        checkboxGroupInput("InputRangeTitleGroupCheck", label="Type of right", choices = TitleList, selected = TitleList,
+                           inline = FALSE),
+        checkboxGroupInput("ConditionGroupCheck", label="Condition", choices = ConditionList, selected = ConditionList,
+                           inline = FALSE),
+        checkboxGroupInput("HeatingGroupCheck", label="Heating Type", choices = HeatingList, selected = HeatingList,
+                           inline = FALSE),
+        checkboxGroupInput("MaterialGroupCheck", label="Building Material", choices = MaterialList, selected = MaterialList,
+                           inline = FALSE)
+    ),
+    box(solidHeader = TRUE,
+        #collapsible = TRUE,
+        background="black",
+        width=4,
+        checkboxGroupInput("InputRangeKeruletGroupCheck", label="District", choices = Keruletek, selected = Keruletek,
+                           inline = FALSE)
+    )
+    )
+  )
   ),
   dashboardBody(
     tabItems(
@@ -88,47 +134,61 @@ ui<-dashboardPage(
               )
       ),
       # Second tab content
-      tabItem(tabName = "Singlesnapshot",
-              fluidRow(
-                box(width=3,
-                    solidHeader = TRUE,
-                    height = 100,
-                    h2("Single snapshots")),
-                box(width=9,
-                    solidHeader = TRUE,
-                    height = 100,
-                selectInput("SnapshotImput", "Select a snapshot",choices = ListofSnapshotIDs,multiple = FALSE))
-                ),
-              fluidRow(
-                box(width=5,
-                  solidHeader = TRUE,
-                  height = 150,
-                  selectInput("KeruletInput", 
-                              "Kerulet",choices = Keruletek,
-                              multiple = TRUE,
-                              selected=Keruletek
-                              )
-                  ),
-                box(width=3,
-                    solidHeader = TRUE,
-                    height = 150
-   #                 selectInput("TitleInput", "Kerulet",choices = TitleList,multiple = TRUE,selected="Title_Ownership")
-                )
-                ),
-              fluidRow(
-              box(title = "Price Histogram",
-                  status = "primary",
-                  width=6
- #                  plotOutput("PriceHistogram", height = 200)
- )
-              ,
-                box(title = "District volume",
-                    status = "primary",
-                    width=6
-    #                plotOutput("KeruletDiagram", height = 200)
-    )
-              )
+      tabItem(tabName = "Charts",
+        fluidRow(
+        box(title = "Price Histogram",
+            status = "primary",
+            width=6,
+              plotOutput("PriceHistogram", height = 200)
+        )
+        ,
+          box(title = "District volume",
+              status = "primary",
+              width=6,
+              plotOutput("KeruletDiagram", height = 200)
+          )
+        ),
+        fluidRow(
+        box(title = "Price-FloorSize",
+            status = "primary",
+            collapsible = TRUE,
+            width=12,
+            plotOutput("PriceFloorSize", height = 300)
+        )
+        ),
+        fluidRow(
+        box(title="Categorical Descriptiors",
+            collapsed = TRUE,
+          width=12,
+            collapsible = TRUE,
+      fluidRow(
+        box(title = "Type of right",
+          status = "primary",
+          width=4,
+          plotOutput("TitleBoxPlot", height = 200)
+          ),
+        box(title = "Condition",
+            status = "primary",
+            width=8,    
+        plotOutput("ConditionBoxPlot", height = 200)
+        )
       ),
+      fluidRow(
+        box(title = "Building Material",
+            status = "primary",
+            width=4,
+            plotOutput("MaterialBoxPlot", height = 200)
+        ),
+        box(title = "Type of Heating",
+            status = "primary",
+            width=8,    
+            plotOutput("HeatingBoxPlot", height = 200)
+        )
+      )
+      )
+        )
+    )
+    ,
       tabItem(tabName = "Trends",title="The data is subsetted on site, please be patient while it loads",
               fluidRow(
                 box(width=12,
@@ -141,33 +201,7 @@ ui<-dashboardPage(
                     )
                     )
                 ),
-                fluidRow(
-                  box(solidHeader = TRUE,
-                      collapsible = TRUE,
-                checkboxGroupInput("InputRangeTitleGroupCheck", label=NULL, choices = TitleList, selected = TitleList,
-                                   inline = FALSE)
-                  ),
-                box(solidHeader = TRUE,
-                    collapsible = TRUE,
-                    checkboxGroupInput("InputRangeKeruletGroupCheck", label=NULL, choices = Keruletek, selected = Keruletek,
-                                       inline = TRUE)
-                )
-                ),
-              fluidRow(
-                box(width=12,
-                    solidHeader = TRUE,
-                    collapsible = TRUE,
-                    sliderInput("PriceSlider", "Price Range",
-                                min = 5, max = 1000,
-                                value = c(0, 200), post=" million"
-                    ),
-                    sliderInput("floorInput", "Floor Size",
-                                min = 20, max = 1000,
-                                value = c(0, 1000), post=" m2"
-                    )
-                )
-                ),
-                fluidRow(
+               fluidRow(
                 box(
                   width=12,
                   title="Selection Information",
@@ -176,8 +210,13 @@ ui<-dashboardPage(
                   infoBoxOutput("NumberofSelectedSnapshots"),
                   infoBoxOutput("NumberofSelectedAds"),
                   infoBoxOutput("NumberofFilteredAds")
-                  )
+                )
+              ),
+  
+              fluidRow(
+
                 ),
+
                 fluidRow(
                   box(
                     width=12,
@@ -205,8 +244,10 @@ ui<-dashboardPage(
                     collapsible = FALSE,
                     "This Shiny app was made by István Juhász",
                     br(),
-                    "The purpose of this application to stand as an interactive dashboard for the data collected by the RealEstimator webcrawler.The source code of the crawler may be fetched from https://github.com/JuhaszIstvan/RealEstimator",
-                    "Questions and inquiries shall be posted at istvan.juhasz at gmail.com"
+                    "The purpose of this application to stand as an interactive dashboard for the data collected by the RealEstimator webcrawler.The source code of the crawler, the processer and Shiny app can be fetched from https://github.com/JuhaszIstvan/RealEstimator",br(),
+                    "It is still very much work in progress, seeing how I am new to the technology, this must have come without much surpise, really. The ultimate goal is to add a the output of the machine learning exercise.",br(),
+                    "Due to the exploratory nature of the this exercise,  items do tend to wander withing sections producing unfeasible configurations. Terribly sorry about that.",br(),
+                    "Questions and comments could be posted at istvan.juhasz at gmail.com"
                     )
               )
 
@@ -242,7 +283,7 @@ server <- function(input, output) {
     })
   
   FilteredRangedDataSet<-reactive({
-    RangedDataSet()[RangedDataSet()$RC_Title %in% input$InputRangeTitleGroupCheck & RangedDataSet()$Kerulet %in% input$InputRangeKeruletGroupCheck & RangedDataSet()$MeretCleared >= input$floorInput[1] & RangedDataSet()$MeretCleared <= input$floorInput[2] & RangedDataSet()$RC_ArMil >= input$PriceSlider[1] & RangedDataSet()$RC_ArMil <= input$PriceSlider[2],]
+    RangedDataSet()[RangedDataSet()$RC_Title %in% input$InputRangeTitleGroupCheck & RangedDataSet()$Kerulet %in% input$InputRangeKeruletGroupCheck & RangedDataSet()$MeretCleared >= input$floorInput[1] & RangedDataSet()$MeretCleared <= input$floorInput[2] & RangedDataSet()$RC_ArMil >= input$PriceSlider[1] & RangedDataSet()$RC_ArMil <= input$PriceSlider[2] & RangedDataSet()$RC_Condition %in% input$ConditionGroupCheck & RangedDataSet()$RC_Heating %in% input$HeatingGroupCheck & RangedDataSet()$RC_Material %in% input$MaterialGroupCheck,]
   })
   
   
@@ -253,12 +294,12 @@ server <- function(input, output) {
     )})
   output$NumberofSelectedAds <- renderInfoBox({
     infoBox(
-      "Ads", nrow(RangedDataSet()), icon = icon("list"),
+      "Total Collected Ads", nrow(RangedDataSet()), icon = icon("list"),
       color = "orange"
     )})
   output$NumberofFilteredAds <- renderInfoBox({
     infoBox(
-      "Filtered", nrow(FilteredRangedDataSet()), icon = icon("list"),
+      "Filtered Ads", nrow(FilteredRangedDataSet()), icon = icon("list"),
       color = "blue"
     )})
   
@@ -282,7 +323,7 @@ server <- function(input, output) {
   #observe({ print(paste("filtereddataset",class(FilteredRangedDataSet()$QueryTime)))})
   TempSessions<-Sessions
   TempSessions$SnapshotDate <- format(TempSessions$SnapshotDate,'%Y-%m-%d')
-  TempSessions<-TempSessions[,c("SessionID","SnapshotDate","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
+  TempSessions<-TempSessions[,c("SessionID","SnapshotDate","ResultNumber","ReceivedAds","NewAdNumber","MissRatePercent","ClosedAdNumber")]
   output$SessionTable <-renderTable({TempSessions})
 
 output$Snapshots<- renderPlot({
@@ -300,17 +341,49 @@ output$PriceBoxPlot <- renderPlot({
 })
 
 
-#output$PriceHistogram <- renderPlot({
-#  ggplot(filtered(), aes(RC_ArMil)) +
-#    geom_histogram()
-#})
+output$TitleBoxPlot<- renderPlot({
+ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Title, y = RC_ArMil)) + 
+  geom_boxplot() +
+    coord_cartesian(ylim = c(0, 100))
+})
 
-#output$KeruletDiagram <- renderPlot({
-#  ggplot(data=filtered())+
-#    geom_bar(mapping = aes(x = Kerulet), fill='orange')
-#})
+output$HeatingBoxPlot<- renderPlot({
+  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Heating, y = RC_ArMil)) + 
+    geom_boxplot() +
+    coord_cartesian(ylim = c(0, 100))
+})
+output$MaterialBoxPlot<- renderPlot({
+  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Material, y = RC_ArMil)) + 
+    geom_boxplot() +
+    coord_cartesian(ylim = c(0, 100))
+})
 
-output$FilteredTable <-renderTable({head(FilteredRangedDataSet())})
+output$ConditionBoxPlot<- renderPlot({
+  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Condition, y = RC_ArMil)) + 
+    geom_boxplot() +
+    coord_cartesian(ylim = c(0, 100))
+})
+
+
+
+output$PriceFloorSize <- renderPlot({
+
+  ggplot(data=FilteredRangedDataSet())+
+    geom_point(mapping = aes(x=MeretCleared, y=RC_ArMil), position="jitter")+
+    geom_smooth(mapping = aes(x = MeretCleared, y = RC_ArMil, group = Kerulet))
+  })
+
+output$PriceHistogram <- renderPlot({
+  ggplot(FilteredRangedDataSet(), aes(RC_ArMil)) +
+    geom_histogram()
+})
+
+output$KeruletDiagram <- renderPlot({
+  ggplot(data=FilteredRangedDataSet())+
+    geom_bar(mapping = aes(x = Kerulet), fill='orange')
+})
+
+output$FilteredTable <-renderTable({head(FilteredRangedDataSet()[, -which(names(FilteredRangedDataSet()) %in% c("SessionID", "StartTime","QueryTime","SnapshotDate"))])})
 
 }
 shinyApp(ui = ui, server = server)
