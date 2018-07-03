@@ -3,6 +3,7 @@ library(shiny)
 library(rdrop2)
 library(ggplot2)
 library(shinydashboard)
+#library(ggvis)
 #dropbox token
 token <- readRDS("droptoken.rds")
 drop_acc(dtoken = token)
@@ -36,6 +37,7 @@ Sessions$SessionID<-droplevels(Sessions$SessionID) # Probably unnecessary
 ListofSnapshotIDs<-levels(Sessions$SessionID)
 TitleList<-levels(AnalysisAdList$RC_Title)
 ConditionList<-levels(AnalysisAdList$RC_Condition)
+ParkingList<-levels(AnalysisAdList$RC_PARKING)
 MaterialList<-levels(AnalysisAdList$RC_Material)
 HeatingList<-levels(AnalysisAdList$RC_Heating)
 ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
@@ -75,12 +77,12 @@ ui<-dashboardPage(
           solidHeader = TRUE,
           collapsible = TRUE,
           sliderInput("PriceSlider", "Price Range",
-                      min = 5, max = 1000,
-                      value = c(0, 200), post=" million"
+                      min = 0, max = 1000,
+                      value = c(5, 200), post=" million"
           ),
           sliderInput("floorInput", "Floor Size",
-                      min = 20, max = 1000,
-                      value = c(0, 1000), post=" m2"
+                      min = 0, max = 1000,
+                      value = c(20, 1000), post=" m2"
           )
       )
     )
@@ -99,20 +101,24 @@ ui<-dashboardPage(
                            inline = FALSE),
         checkboxGroupInput("HeatingGroupCheck", label="Heating Type", choices = HeatingList, selected = HeatingList,
                            inline = FALSE),
-        checkboxGroupInput("MaterialGroupCheck", label="Building Material", choices = MaterialList, selected = MaterialList,
+        checkboxGroupInput("ParkingGroupCheck", label="Parking", choices = ParkingList, selected = ParkingList,
                            inline = FALSE)
     ),
     box(solidHeader = TRUE,
         #collapsible = TRUE,
         background="black",
         width=4,
-        checkboxGroupInput("InputRangeKeruletGroupCheck", label="District", choices = Keruletek, selected = Keruletek,
+        checkboxGroupInput("KeruletGroupCheck", label="District", choices = Keruletek, selected = Keruletek,
+                           inline = FALSE),
+        checkboxGroupInput("MaterialGroupCheck", label="Building Material", choices = MaterialList, selected = MaterialList,
                            inline = FALSE)
+
     )
     )
   )
   ),
   dashboardBody(
+    tags$head(tags$style(HTML('.info-box {min-height: 50px; min-width: 50px;} .info-box-icon {width: 45px; height: 45px; line-height: 45px;} .info-box-content {padding-right: 0px;padding-left: 0px;padding-top: 0px; padding-bottom: 0px;}'))),
     tabItems(
       # First tab content
       tabItem(tabName = "TabTechnical",
@@ -179,6 +185,18 @@ ui<-dashboardPage(
             width=4,
             plotOutput("MaterialBoxPlot", height = 200)
         ),
+        box(title = "Floor level",
+            status = "primary",
+            width=8,    
+            plotOutput("EtageBoxPlot", height = 200)
+        )
+      ),
+      fluidRow(
+        box(title = "Parking Options",
+            status = "primary",
+            width=4,    
+            plotOutput("ParkingBoxPlot", height = 200)
+        ),
         box(title = "Type of Heating",
             status = "primary",
             width=8,    
@@ -229,7 +247,7 @@ ui<-dashboardPage(
               fluidRow(
                 box(
                   width=12,
-                  title="Selection Preview",
+                  title="Selection Price Graph",
                   solidHeader=TRUE,
                   collapsible=TRUE,
                   plotOutput("PriceBoxPlot")
@@ -283,7 +301,7 @@ server <- function(input, output) {
     })
   
   FilteredRangedDataSet<-reactive({
-    RangedDataSet()[RangedDataSet()$RC_Title %in% input$InputRangeTitleGroupCheck & RangedDataSet()$Kerulet %in% input$InputRangeKeruletGroupCheck & RangedDataSet()$MeretCleared >= input$floorInput[1] & RangedDataSet()$MeretCleared <= input$floorInput[2] & RangedDataSet()$RC_ArMil >= input$PriceSlider[1] & RangedDataSet()$RC_ArMil <= input$PriceSlider[2] & RangedDataSet()$RC_Condition %in% input$ConditionGroupCheck & RangedDataSet()$RC_Heating %in% input$HeatingGroupCheck & RangedDataSet()$RC_Material %in% input$MaterialGroupCheck,]
+    RangedDataSet()[RangedDataSet()$RC_Title %in% input$InputRangeTitleGroupCheck & RangedDataSet()$Kerulet %in% input$KeruletGroupCheck & RangedDataSet()$MeretCleared >= input$floorInput[1] & RangedDataSet()$MeretCleared <= input$floorInput[2] & RangedDataSet()$RC_ArMil >= input$PriceSlider[1] & RangedDataSet()$RC_ArMil <= input$PriceSlider[2] & RangedDataSet()$RC_Condition %in% input$ConditionGroupCheck & RangedDataSet()$RC_Heating %in% input$HeatingGroupCheck & RangedDataSet()$RC_Material %in% input$MaterialGroupCheck & RangedDataSet()$RC_PARKING %in% input$ParkingGroupCheck,]
   })
   
   
@@ -342,11 +360,23 @@ output$PriceBoxPlot <- renderPlot({
 
 
 output$TitleBoxPlot<- renderPlot({
-ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Title, y = RC_ArMil)) + 
+ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Title, y = RC_ArMil)) +
   geom_boxplot() +
     coord_cartesian(ylim = c(0, 100))
 })
 
+# output$TitleBoxPlot<- renderPlot({
+#   FilteredRangedDataSet() %>% ggvis(~RC_Title, ~RC_ArMil) %>% layer_boxplots()
+# })
+
+
+
+
+output$ParkingBoxPlot<- renderPlot({
+  ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_PARKING, y = RC_ArMil)) + 
+    geom_boxplot() +
+    coord_cartesian(ylim = c(0, 100))
+})
 output$HeatingBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Heating, y = RC_ArMil)) + 
     geom_boxplot() +
@@ -362,6 +392,13 @@ output$ConditionBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Condition, y = RC_ArMil)) + 
     geom_boxplot() +
     coord_cartesian(ylim = c(0, 100))
+})
+
+
+output$EtageBoxPlot <- renderPlot({
+ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0, 100))
 })
 
 
