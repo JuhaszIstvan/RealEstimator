@@ -1217,3 +1217,12 @@ if(exists("ProjectAdList")){rm(ProjectAdList)}
 
 # Producing the report ----------------------------------------------------
 cat("Execution completed")
+
+# Sending a notification email
+library(gmailR)
+mime() %>%
+  to(ProjectData$NotificationTo) %>%
+  from(ProjectData$NotificationFrom) %>%
+  subject("Data Collection Completed") %>%
+  text_body(SessionID) -> text_msg2
+send_message(text_msg2)
