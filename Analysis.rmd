@@ -172,8 +172,11 @@ I am dropping the flats whose floorsize is missing
 
 ```{r MeretClearred}
 AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$MeretCleared),]
+
 AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(-MeretCleared)), ]
 head(AnalysisAdDetailList[,c("SiteID","SiteUrl","MeretCleared")])
+AnalysisAdDetailList$MeretCleared<-as.integer(as.character(AnalysisAdDetailList$MeretCleared))
+
 ```
 
 ```{r PicNums}
@@ -593,7 +596,7 @@ exportedSessionTable<-exportedSessionTable[!duplicated(exportedSessionTable$Snap
 #Preprocessing the AdList table ----
 
 exportedAdList<-AnalysisAdList[(AnalysisAdList$SessionID %in% exportedSessionTable$SessionID),] # dropping unreported Ads
-exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime")]
+exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime","titles")]
 exportedAdList<-merge(x=exportedAdList,y=exportedSessionTable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
 
 #Preprocessing the AdDetails table ----
