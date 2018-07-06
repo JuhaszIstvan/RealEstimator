@@ -15,11 +15,11 @@ if (!file.exists(AnalysisAdDetailListFile)) {
   }
 #AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
 
-AnalysisAdListFile<-"ShinyAdlistTable.Rda"
-if (!file.exists(AnalysisAdListFile)) {
-  drop_download(AnalysisAdListFile,overwrite = TRUE)
+AppAdListFile<-"ShinyAdlistTable.Rda"
+if (!file.exists(AppAdListFile)) {
+  drop_download(AppAdListFile,overwrite = TRUE)
   }
-AnalysisAdList<-readRDS(file=AnalysisAdListFile, refhook =NULL)
+AppAdList<-readRDS(file=AppAdListFile, refhook =NULL)
 
 
 SessionTableFile<-"ShinySessionTable.Rda"
@@ -35,11 +35,11 @@ AnalysisSessionTable$ReceivedAds<-as.integer(as.character(AnalysisSessionTable$R
 Sessions<-AnalysisSessionTable[!is.na(AnalysisSessionTable$SessionID),] # added when the subsetting # Pushed back to Analysis.R 
 Sessions$SessionID<-droplevels(Sessions$SessionID) # Probably unnecessary
 ListofSnapshotIDs<-levels(Sessions$SessionID)
-TitleList<-levels(AnalysisAdList$RC_Title)
-ConditionList<-levels(AnalysisAdList$RC_Condition)
-ParkingList<-levels(AnalysisAdList$RC_PARKING)
-MaterialList<-levels(AnalysisAdList$RC_Material)
-HeatingList<-levels(AnalysisAdList$RC_Heating)
+TitleList<-levels(AppAdList$RC_Title)
+ConditionList<-levels(AppAdList$RC_Condition)
+ParkingList<-levels(AppAdList$RC_PARKING)
+MaterialList<-levels(AppAdList$RC_Material)
+HeatingList<-levels(AppAdList$RC_Heating)
 ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
 #Sessions<-Sessions[order(xtfrm(Sessions$StartTime),desc=T ),, drop = FALSE] # candidate for deletion
 #Sessions<-Sessions[with(Sessions, order(xtfrm(Sessions$StartTime)),decreasing=TRUE),] # candidate for deletion
@@ -48,17 +48,17 @@ ListofSnapshotIDs<-sort(ListofSnapshotIDs, decreasing = TRUE)
 
 #Sessions$StartTime<-format(Sessions$StartTime,"%Y-%m-%d")
 
-Keruletek<-levels(AnalysisAdList$Kerulet)
+Keruletek<-levels(AppAdList$Kerulet)
 
-sqMinSize<-min(AnalysisAdList$MeretCleared)
-sqMaxSize<-max(AnalysisAdList$MeretCleared)
+sqMinSize<-min(AppAdList$MeretCleared)
+sqMaxSize<-max(AppAdList$MeretCleared)
 
 
 sqMinSnapTime<-min(Sessions$SnapshotDate, na.rm=TRUE)
 sqMaxSnapTime<-max(Sessions$SnapshotDate,na.rm=TRUE)
 
 
-print(dim(AnalysisAdList))
+print(dim(AppAdList))
 
 
 ui<-dashboardPage(
@@ -293,8 +293,8 @@ server <- function(input, output) {
   
   
   RangedDataSet<-reactive({
-    # Pushed back to Analysis.R TempSet<-AnalysisAdList[AnalysisAdList$SessionID %in% FilteredSnapShots()$SessionID,c("SiteID","SessionID","QueryTime")]
-    AnalysisAdList[AnalysisAdList$SessionID %in% FilteredSnapShots()$SessionID,] # Added after the above line was # Pushed back to Analysis.R
+    # Pushed back to Analysis.R TempSet<-AppAdList[AppAdList$SessionID %in% FilteredSnapShots()$SessionID,c("SiteID","SessionID","QueryTime")]
+    AppAdList[AppAdList$SessionID %in% FilteredSnapShots()$SessionID,] # Added after the above line was # Pushed back to Analysis.R
     # Pushed back to Analysis.R TempSet<-merge(x=TempSet,y=Sessions[,c("SessionID","StartTime")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
     # Pushed back to Analysis.R TempSet<-merge(x=TempSet,y=AnalysisAdDetailList,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
     # Pushed back to Analysis.R TempSet$SnapshotDate<-as.Date(TempSet$StartTime)
@@ -328,8 +328,8 @@ server <- function(input, output) {
 
   
 #  FilteredSnapSet<-reactive({
-  #AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
- # FilteredAdList<-AnalysisAdList[AnalysisAdList$SessionID==input$SnapshotImput,'SiteID']
+  #AppAdList[AppAdList$SessionID==input$SnapshotImput,'SiteID']
+ # FilteredAdList<-AppAdList[AppAdList$SessionID==input$SnapshotImput,'SiteID']
   #FilteredAdList
   #FilteredAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% FilteredAdList,]
   #FilteredAdDetailList$Deviance<-ifelse(QueryEndTime()-FilteredAdDetailList$QueryTime>0,QueryEndTime()-FilteredAdDetailList$QueryTime,9999999999999)
