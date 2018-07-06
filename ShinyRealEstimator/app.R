@@ -68,6 +68,7 @@ ui<-dashboardPage(
     sidebarMenu(
       menuItem("Filters - TrendLines", tabName = "Trends", icon = icon("th"),badgeLabel ="WIP",badgeColor = "yellow"),
       menuItem("Cross Section Charts", tabName = "Charts", icon = icon("th"),badgeLabel ="WIP",badgeColor = "orange"),
+      menuItem("Data Tables", tabName = "TabData", icon = icon("th")),
       menuItem("Data Quality", tabName = "TabTechnical", icon = icon("dashboard")),
       menuItem("About", tabName = "About", icon = icon("th"))
     ),
@@ -120,7 +121,7 @@ ui<-dashboardPage(
   dashboardBody(
     tags$head(tags$style(HTML('.info-box {min-height: 50px; min-width: 50px;} .info-box-icon {width: 45px; height: 45px; line-height: 45px;} .info-box-content {padding-right: 0px;padding-left: 0px;padding-top: 0px; padding-bottom: 0px;}'))),
     tabItems(
-      # First tab content
+      # First tab's contents
       tabItem(tabName = "TabTechnical",
               fluidRow(
                 box(width=12,
@@ -139,7 +140,19 @@ ui<-dashboardPage(
                   tableOutput("SessionTable"))
               )
       ),
-      # Second tab content
+      #Second tab's contents
+      tabItem(tabName = "TabData",
+              fluidRow(
+                box(
+                  width=12,
+                  title="Selection Top 5",
+                  solidHeader=TRUE,
+                  collapsible=TRUE,
+                  tableOutput("FilteredTable")
+                )
+              )
+      ),
+      # third tab contents
       tabItem(tabName = "Charts",
         fluidRow(
         box(title = "Price Histogram",
@@ -207,6 +220,7 @@ ui<-dashboardPage(
         )
     )
     ,
+    #fourth tab's contents
       tabItem(tabName = "Trends",title="The data is subsetted on site, please be patient while it loads",
               fluidRow(
                 box(width=12,
@@ -231,19 +245,7 @@ ui<-dashboardPage(
                 )
               ),
   
-              fluidRow(
 
-                ),
-
-                fluidRow(
-                  box(
-                    width=12,
-                    title="Selection Top 5",
-                    solidHeader=TRUE,
-                    collapsible=TRUE,
-                    tableOutput("FilteredTable")
-                  )
-                ),
               fluidRow(
                 box(
                   width=12,
