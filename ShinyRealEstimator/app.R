@@ -83,7 +83,7 @@ ui<-dashboardPage(
           ),
           sliderInput("floorInput", "Floor Size",
                       min = 0, max = 1000,
-                      value = c(20, 1000), post=" m2"
+                      value = c(20, 280), post=" m2"
           )
       )
     )
@@ -177,7 +177,7 @@ ui<-dashboardPage(
         ),
         fluidRow(
         box(title="Categorical Descriptiors",
-            collapsed = TRUE,
+            collapsed = FALSE,
           width=12,
             collapsible = TRUE,
       fluidRow(
@@ -240,6 +240,7 @@ ui<-dashboardPage(
                   solidHeader=TRUE,
                   collapsible=TRUE,
                   infoBoxOutput("NumberofSelectedSnapshots"),
+                  infoBoxOutput("NumberofReportedAds"),
                   infoBoxOutput("NumberofSelectedAds"),
                   infoBoxOutput("NumberofFilteredAds")
                 )
@@ -314,12 +315,17 @@ server <- function(input, output) {
     )})
   output$NumberofSelectedAds <- renderInfoBox({
     infoBox(
-      "Total Collected Ads", nrow(RangedDataSet()), icon = icon("list"),
+      "Collected DataPoints", nrow(RangedDataSet()), icon = icon("list"),
+      color = "orange"
+    )})
+  output$NumberofReportedAds <- renderInfoBox({
+    infoBox(
+      "Reported Datapoints", sum(FilteredSnapShots()$ResultNumber), icon = icon("list"),
       color = "orange"
     )})
   output$NumberofFilteredAds <- renderInfoBox({
     infoBox(
-      "Filtered Ads", nrow(FilteredRangedDataSet()), icon = icon("list"),
+      "Filtered Datapoints", nrow(FilteredRangedDataSet()), icon = icon("list"),
       color = "blue"
     )})
   
@@ -357,14 +363,16 @@ output$Snapshots<- renderPlot({
 output$PriceBoxPlot <- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = SnapshotDate, y = RC_ArMil, group= SnapshotDate)) + 
     scale_x_date(name = 'SnapshotDate') +
-    geom_boxplot()
+    geom_boxplot() +
+    labs(x="Snapshot date",y="Price in MM HUF")
 })
 
 
 output$TitleBoxPlot<- renderPlot({
 ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Title, y = RC_ArMil)) +
   geom_boxplot() +
-    coord_cartesian(ylim = c(0, 100))
+    coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Title sold",y="Price in MM HUF")
 })
 
 # output$TitleBoxPlot<- renderPlot({
@@ -377,49 +385,56 @@ ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Title, y = RC_ArMil)
 output$ParkingBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_PARKING, y = RC_ArMil)) + 
     geom_boxplot() +
-    coord_cartesian(ylim = c(0, 100))
+    coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Parking",y="Price in MM HUF")
 })
 output$HeatingBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Heating, y = RC_ArMil)) + 
     geom_boxplot() +
-    coord_cartesian(ylim = c(0, 100))
+    coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Heating Type",y="Price in MM HUF")
 })
 output$MaterialBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Material, y = RC_ArMil)) + 
     geom_boxplot() +
-    coord_cartesian(ylim = c(0, 100))
+    coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Building Material",y="Price in MM HUF")
 })
 
 output$ConditionBoxPlot<- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_Condition, y = RC_ArMil)) + 
     geom_boxplot() +
-    coord_cartesian(ylim = c(0, 100))
+    coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Condition",y="Price in MM HUF")
 })
 
 
 output$EtageBoxPlot <- renderPlot({
 ggplot(data = FilteredRangedDataSet(), mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
   geom_boxplot() +
-  coord_cartesian(ylim = c(0, 100))
+  coord_cartesian(ylim = c(0, 100)) +
+    labs(x="Floor size in m2",y="Price in MM HUF")
 })
-
 
 
 output$PriceFloorSize <- renderPlot({
 
   ggplot(data=FilteredRangedDataSet())+
     geom_point(mapping = aes(x=MeretCleared, y=RC_ArMil), position="jitter")+
-    geom_smooth(mapping = aes(x = MeretCleared, y = RC_ArMil, group = Kerulet))
+    geom_smooth(mapping = aes(x = MeretCleared, y = RC_ArMil, colour = Kerulet))+
+    labs(x="Floor size in m2",y="Price in MM HUF")
   })
 
 output$PriceHistogram <- renderPlot({
   ggplot(FilteredRangedDataSet(), aes(RC_ArMil)) +
-    geom_histogram()
+    geom_histogram() +
+    labs(y="Ad volume",x="Price in MM HUF")
 })
 
 output$KeruletDiagram <- renderPlot({
   ggplot(data=FilteredRangedDataSet())+
-    geom_bar(mapping = aes(x = Kerulet), fill='orange')
+    geom_bar(mapping = aes(x = Kerulet), fill='orange') +
+    labs(y="Ad volume",y="District")
 })
 
 output$FilteredTable <-renderTable({head(FilteredRangedDataSet()[, -which(names(FilteredRangedDataSet()) %in% c("SessionID", "StartTime","QueryTime","SnapshotDate"))])})

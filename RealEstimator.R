@@ -1219,7 +1219,7 @@ if(exists("ProjectAdList")){rm(ProjectAdList)}
 cat("Execution completed")
 
 # Sending a notification email
-library(gmailR)
+library(gmailr)
 mime() %>%
   to(ProjectData$NotificationTo) %>%
   from(ProjectData$NotificationFrom) %>%
