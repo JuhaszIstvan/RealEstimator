@@ -684,7 +684,8 @@ replaceMe<-function(df,from,to,level='LocStreet1'){
 }
  
 ProjectName="JofogasLakasokBPFull"
-SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
+SessionTableFile<-"SessionTable.Rda"
+SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
 TableOfProjectsFile<-"rest_TableOfProjects.Rda"
 TableOfProjects<-readRDS(file=TableOfProjectsFile)
 
@@ -1220,9 +1221,15 @@ cat("Execution completed")
 
 # Sending a notification email
 library(gmailr)
+SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
+SessionRecord<-SessionTable[SessionTable$SessionID==SessionID,]
+ForShowTable<-t(SessionRecord)
+colnames(ForShowTable)<-c("Value")
+reportbody<-knitr::kable(ForShowTable,format="html", pad=0)
 mime() %>%
   to(ProjectData$NotificationTo) %>%
   from(ProjectData$NotificationFrom) %>%
-  subject("Data Collection Completed") %>%
-  text_body(SessionID) -> text_msg2
-send_message(text_msg2)
+  subject(paste("Data Collection Completed: ", SessionID)) %>%
+  html_body(reportbody) -> text_msg
+send_message(text_msg)
+
