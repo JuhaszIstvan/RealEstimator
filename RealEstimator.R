@@ -22,6 +22,12 @@ for(index in 1:length(libraries)){
 }
 
 # Functions ---------------------------------------------------------------
+runAllChunks <- function(rmd, envir=globalenv()){
+  tempR <- tempfile(tmpdir = ".", fileext = ".R")
+  on.exit(unlink(tempR))
+  knitr::purl(rmd, output=tempR)
+  sys.source(tempR, envir=envir)
+}
 
 GenerateURL<-function(siteurl='https://ingatlan.jofogas.hu/',Sellbuy='s',Commodity='lakas',City="budapest"){
   if (exists("Minsize") & exists("Maxsize")){
@@ -1220,6 +1226,8 @@ if(exists("ProjectAdList")){rm(ProjectAdList)}
 cat("Execution completed")
 
 # Sending a notification email
+library(knitr)
+runAllChunks("Analysis.rmd")
 library(gmailr)
 SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
 SessionRecord<-SessionTable[SessionTable$SessionID==SessionID,]
@@ -1232,4 +1240,3 @@ mime() %>%
   subject(paste("Data Collection Completed: ", SessionID)) %>%
   html_body(reportbody) -> text_msg
 send_message(text_msg)
-
