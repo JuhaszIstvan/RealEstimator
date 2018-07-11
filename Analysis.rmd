@@ -71,7 +71,7 @@ for(index in 1:length(libraries)){
    lapply(libraries, require, character.only = TRUE)
 }
 
-
+GoFULL<-FALSE
 set.seed(7)
 LocationData=FALSE
 ZipData=TRUE
@@ -118,12 +118,12 @@ In order to combat duplication , we could grab either the latest entry, or we co
 
 Using the Amelia package, we can see how much data do we truly have:
 
-```{r missmap, echo=TRUE,show=TRUE}
+```{r missmap, echo=TRUE,show=TRUE,purl=FALSE}
 missmap(AnalysisAdDetailList, main = "Missing values vs observed")
 ```
 
 ... and the summary of the dataset:
-```{r summary, echo=TRUE,show=TRUE}
+```{r summary, echo=TRUE,show=TRUE,purl=FALSE}
 dim(AnalysisAdDetailList)
 summary(AnalysisAdDetailList)
 ```
@@ -584,7 +584,7 @@ Shinyfolder<-paste(getwd(),"ShinyRealEstimator",sep="/") # the location of the S
 
 #Pre-processing the sessions' table ----
 
-exportedSessionTable<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>15000 & AnalysisSessionTable$ReceivedAds>15000 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
+exportedSessionTable<-AnalysisSessionTable[AnalysisSessionTable$ProjectName=="JofogasLakasokBPFull" & AnalysisSessionTable$ResultNumber>12000 & AnalysisSessionTable$ReceivedAds>12000 & !is.na(AnalysisSessionTable$StartTime) & AnalysisSessionTable$Status=="Completed",c("SessionID","StartTime","ResultNumber","ReceivedAds","NewAdNumber","ClosedAdNumber")]
 
 exportedSessionTable<-exportedSessionTable[order(exportedSessionTable$StartTime, decreasing = TRUE),]
 
@@ -631,7 +631,7 @@ There are two broad approaches for identifying duplicates:stochastic methods and
 a successful classification is maximum. 
 
 Let's load the library and generate a simple control table for comparison.
-```{r RecordLinkage}
+```{r RecordLinkage,purl=FALSE}
 library(RecordLinkage)
 #small reproducible test
 DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$RC_RoomNumLarge=="3" & AnalysisAdDetailList$Kerulet=="XVIII." & AnalysisAdDetailList$MeretCleared==74,]
@@ -807,7 +807,7 @@ One of the most widely  used techinque is the so called K-fold crossvalidation, 
 
 
 #Data Partitioning
-```{r data_partitioning}
+```{r data_partitioning,purl=FALSE}
 #ModelData<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet  %in% c("VIII.","IX.") &!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Location1)),]
 
 ModelData<-AnalysisAdDetailList[!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Kerulet)),]
@@ -826,7 +826,7 @@ dim(TestSet)
 
 
 ##Cross_Validation
-```{r cross_validation}
+```{r cross_validation,purl=FALSE}
 TRC_CV10<-trainControl(method="CV", number=10)
 ```
 
@@ -858,7 +858,7 @@ than for specificity.
 ##Bivariate correation
 Bivariate plot between every pair of attributes
 
-```{r bivariate heatmap}
+```{r bivariate heatmap,purl=FALSE}
 #Template used:http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
 
 HeatMapTable <- TrainingSet[, c("RC_ArMil","MeretCleared","KozkoltsegFtho","RC_RoomNumLarge")]
@@ -944,7 +944,7 @@ grid.arrange(pKitchen, pAppliances, pAlarm,pWC,pAC,pAccess,pCT,pEmeletet, ncol=3
 ```
 
 
-```{r visualisation}
+```{r visualisation,purl=FALSE}
 p5<-ggplot(data=TrainingSet)+
   geom_bar(mapping = aes(x = Kerulet), fill='orange')
 
@@ -973,7 +973,7 @@ p2<-ggplot(KeruletSummery, aes(Kerulet,RC_ArMil)) +
 grid.arrange(p1, p4, p3,p2,p5, ncol=2)
 ```
 
-```{r DummyVars}
+```{r DummyVars,purl=FALSE}
 #KeruletOnly
 TrainingSet$MC2<-TrainingSet$MeretCleared^2
 TrainingSet$MeretLog<-log(TrainingSet$MeretCleared)
@@ -1026,7 +1026,7 @@ print(LM_modelquadInteractionwithexp)
 
 The caret package provides an excellent standardised form for administering multiple Machine Learning models. 
 
-```{r caret_LM_model_fitting}
+```{r caret_LM_model_fitting,purl=FALSE}
 
 
 if(LocationData)
@@ -1260,7 +1260,7 @@ pls has 1 tuningparameters:no variables to retain.
 
 
 
-```{r model_building}
+```{r model_building,purl=FALSE}
 model_Meret<- lm(RC_ArMil ~ MeretCleared, data = TrainingSet)
 coef(model_Meret)
 grid <- TrainingSet %>%
@@ -1289,7 +1289,7 @@ There are several metric for model evaluation, the general rule of thumb is that
 
 rsquared reflects the portion of the explained variance which means R squared is depends on the initial variance in the model. It is possible, thus, to acquirefantsticly high R sq values with relatively large  RMSE metrics.
 
-```{r model_evaluation}
+```{r model_evaluation,purl=FALSE}
 #lm model
 TestSet$Pred_LM7 <- predict(LM_model7, TestSet)
 AnalysisAdDetailList$PredictedValue<-predict(LM_model7, AnalysisAdDetailList)
@@ -1304,25 +1304,25 @@ defaultSummary(lmValues1)
 #rlmPCA<-train(RC_ArMil~MeretCleared+RC_Title+Kerulet+RC_Condition+RC_Material+RC_Heating+RC_FLOOR,data=TrainingSet,method="rlm",metric="RMSE",trControl=TRC_CV10,model=T)
 ```
 
-```{r plotting}
+```{r plotting,purl=FALSE}
 xyplot(TrainingSet$RC_ArMil ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Observed")
 xyplot(resid(LM_model7) ~ predict(LM_model7), type = c("p", "g"), xlab = "Predicted", ylab = "Residuals")
 ```
 
-```{r improvement_MLresults}
+```{r improvement_MLresults,purl=FALSE}
 ```
 
 Use bagging or boosting to improve the well performing models. 
-```{r ensemble_methods}
+```{r ensemble_methods,purl=FALSE}
 ```
 
 
 Use bagging or boosting tto imrpove the well performing models. 
-```{r model_selection}
+```{r model_selection,purl=FALSE}
 
 ```
 
-```{r Presentation}
+```{r Presentation,purl=FALSE}
 
 ```
 
