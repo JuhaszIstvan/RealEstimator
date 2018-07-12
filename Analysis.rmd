@@ -9,9 +9,14 @@ output:
 
 
 
+
+#Be aware, most of this document had been written late at night and hadn't been updated - or, frankly, proofread - in a long-long time to the point that it cannot be considered anything more than a draft. Thank you for your understanding 
+
 #Introduction
 
 ##Motivation
+
+
 In this document, I will attempt to analyse the real estate market using the data collected from the largest Hungarian classified ads website jofogas.hu
 
 The motivation for this analysis is to serve threefold:It is primarily an educational project for building skills in web-scraping, data analysis and machine learning which should be equally useful as a presentation of the authors skills during a possible job hunt. The third reason for creating this document is to use the collected information for evaluating offers.
@@ -99,13 +104,15 @@ AnalysisAdDetailList<-readRDS(file=AnalysisAdDetailListFile, refhook =NULL)
 #AnalysisAdList<-AnalysisAdList[AnalysisAdList$SessionID==AnalysisSessionID,'SiteID']
 #AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$SiteID %in% AnalysisAdList,]
 n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
+DuplicateRows<-nrow(n_occur[n_occur$Freq > 1,])
+rm(n_occur)
 ```
 
 #Exploratory Data Analysis
 
 ##Duplicate values
 
-Checking for duplicates reveals *`r nrow(n_occur[n_occur$Freq > 1,])`* a major error in the data collection process:In order to be able to track changes in price, the cawler stores postings whose prices have altered as additional records. Since the crawler scan use the siteid as keys, the queries return all the instances of an ad.. 
+Checking for duplicates reveals *`r DuplicateRows `* a major error in the data collection process:In order to be able to track changes in price, the cawler stores postings whose prices have altered as additional records. Since the crawler scan use the siteid as keys, the queries return all the instances of an ad.. 
 
 Since writing the following paragraph, I have realised that I could have used the SiteID+Price as composite keys and thus render it redundant regarding the problem discussed above, it does serve as a working solution for eliminating duplicates created for any other reason thereby increasing the robustness of the analysis. 
 
@@ -154,11 +161,11 @@ head(AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil),decreasing=
 ```
 
 ```{r wrangling_Ar3}
-Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,decreasing = T)),]
+#Outliar<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,decreasing = T)),]
 
 
 #AnalysisAdDetailList<-AnalysisAdDetailList[AnalysisAdDetailList$RC_ArMil<200&AnalysisAdDetailList$RC_ArMil>4,]
-ggplot(data = AnalysisAdDetailList) +
+ggplot(data = AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,decreasing = T)),]) +
   geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
 ```
 
@@ -176,7 +183,6 @@ AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$MeretClea
 AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(-MeretCleared)), ]
 head(AnalysisAdDetailList[,c("SiteID","SiteUrl","MeretCleared")])
 AnalysisAdDetailList$MeretCleared<-as.integer(as.character(AnalysisAdDetailList$MeretCleared))
-
 ```
 
 ```{r PicNums}
@@ -443,10 +449,10 @@ newvariablename="RC_FLOOR"
 AnalysisAdDetailList[[newvariablename]]<-AnalysisAdDetailList[[tempvariablename]]
 knitr::kable(as.data.frame(table(AnalysisAdDetailList[[newvariablename]],useNA="ifany")))
 AnalysisAdDetailList[is.na(AnalysisAdDetailList[newvariablename]),newvariablename]<-"NotSpecified"
-pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
-  geom_boxplot() +
-  coord_cartesian(ylim = c(0, 100))
-pEmeletet
+#pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
+#  geom_boxplot() +
+#  coord_cartesian(ylim = c(0, 100))
+#pEmeletet
 
 ```
 Hnngary uses the british type of notations where the first floor is not the ground floor but the one immediately above it. Looking at the caht, it becomes quickly rather quite obvious that while the varianse is striking, it  is far from being linear. it  looks like that the distributions of the first, second, third and forth floors have similar characteristics.  
@@ -460,10 +466,10 @@ AnalysisAdDetailList[AnalysisAdDetailList[[tempvariablename]] %in% c("földszint
 
 AnalysisAdDetailList[[tempvariablename]]<-factor(AnalysisAdDetailList[[tempvariablename]],ordered=T)
 
-pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
-  geom_boxplot() +
-  coord_cartesian(ylim = c(0, 100))
-pEmeletet
+#pEmeletet<-ggplot(data = AnalysisAdDetailList, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
+#  geom_boxplot() +
+#  coord_cartesian(ylim = c(0, 100))
+#pEmeletet
 
 ```
 
@@ -520,8 +526,15 @@ pattern<-".*azonosító:[[:space:]]*([^[:space:]]*)[[:space:]]*"
 pattern2<-".*referencia szám[[:space:]]*:[[:space:]]*([^[:space:]]*)[[:space:]]*"
 patternM<-".*(M[[:digit:]]{6,6})[^[:digit:]].*"
 
-AnalysisAdDetailList$RefNum<-gsub(pattern,"\\1",AnalysisAdDetailList$Description)
+totalpattern<-paste0(pattern2,"|",pattern2,"|",patternM)
+#AnalysisAdDetailList$RefNum<-gsub((pattern)|(pattern2)|(patternM),"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T)
+AnalysisAdDetailList$ReferenceNumber<-ifelse(grepl(totalpattern,AnalysisAdDetailList$RC_Description,ignore.case=T),gsub(totalpattern,"\\1\\2\\3",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
 
+#AnalysisAdDetailList$RefNum<-ifelse(grepl(pattern,AnalysisAdDetailList$RC_Description,ignore.case=T),sub(pattern,"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
+
+#AnalysisAdDetailList$RefNum2<-ifelse(grepl(pattern2,AnalysisAdDetailList$RC_Description,ignore.case=T),gsub(pattern2,"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
+
+AnalysisAdDetailList$RefNumM<-ifelse(grepl(patternM,AnalysisAdDetailList$RC_Description,ignore.case=T),gsub(patternM,"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
 ```
 
 ##Advertiser(Hirdeto)
@@ -553,7 +566,7 @@ AnalysisAdDetailList[[newvariablename]]<-factor(AnalysisAdDetailList[[newvariabl
 rm(n_occur)
 AnalysisAdDetailList$Deviance<-ifelse(QueryEndTime-AnalysisAdDetailList$QueryTime>0,QueryEndTime-AnalysisAdDetailList$QueryTime,9999999999999)
 n_occur<-data.frame(table(AnalysisAdDetailList$SiteID))
-
+rm(n_occur)
 Scope<-"Total"
 if(Scope=="Total") {
 AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(QueryTime,decreasing = T)),]
@@ -599,9 +612,9 @@ exportedAdList<-AnalysisAdList[(AnalysisAdList$SessionID %in% exportedSessionTab
 exportedAdList<-exportedAdList[,c("SiteID","SessionID","QueryTime","titles")]
 exportedAdList<-merge(x=exportedAdList,y=exportedSessionTable[,c("SessionID","StartTime","SnapshotDate")],by=c("SessionID"),all.x = TRUE,all.y=FALSE)
 
+exportedcolumns<-c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared","RC_Condition","RC_Heating","RC_FLOOR","RC_Material","RC_PARKING")
 #Preprocessing the AdDetails table ----
-exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% c("RC_ArMil","SiteID","QueryTime","RC_Title","Kerulet","MeretCleared","RC_Condition","RC_Heating","RC_FLOOR","RC_Material","RC_PARKING"))]
-
+exportedShiny<-AnalysisAdDetailList[,(names(AnalysisAdDetailList) %in% exportedcolumns)]
 exportedAdList<-merge(x=exportedAdList,y=exportedShiny,by=c("SiteID","QueryTime"),all.x = TRUE,all.y=FALSE)
 
 saveRDS(exportedSessionTable,paste(Shinyfolder,ShinySessionTableFile,sep="/"))
@@ -609,7 +622,9 @@ saveRDS(exportedAdList,paste(Shinyfolder,ShinyAdListFile,sep="/"))
 #Unnecessary, candidate for deletion saveRDS(exportedShiny,paste(Shinyfolder,ShinyDetailTableFile,sep="/")) 
 
 
-
+rm(AnalysisAdList)
+rm(exportedShiny)
+rm(AnalysisSessionTable)
 #Uploading to drop-box ----
 library(rdrop2)
 token <- readRDS("droptoken.rds")
@@ -631,7 +646,7 @@ There are two broad approaches for identifying duplicates:stochastic methods and
 a successful classification is maximum. 
 
 Let's load the library and generate a simple control table for comparison.
-```{r RecordLinkage,purl=FALSE}
+```{r RecordLinkage,purl=FALSE, eval=FALSE}
 library(RecordLinkage)
 #small reproducible test
 DedupeTestSet<-AnalysisAdDetailList[AnalysisAdDetailList$RC_RoomNumLarge=="3" & AnalysisAdDetailList$Kerulet=="XVIII." & AnalysisAdDetailList$MeretCleared==74,]
@@ -810,7 +825,15 @@ One of the most widely  used techinque is the so called K-fold crossvalidation, 
 ```{r data_partitioning,purl=FALSE}
 #ModelData<-AnalysisAdDetailList[AnalysisAdDetailList$Kerulet  %in% c("VIII.","IX.") &!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Location1)),]
 
+#crude deduplication
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
+
+#removing the outliars and missing values
 ModelData<-AnalysisAdDetailList[!(is.na(AnalysisAdDetailList$RC_ArMil)|is.na(AnalysisAdDetailList$MeretCleared)|is.na(AnalysisAdDetailList$Kerulet)),]
+ModelData<-ModelData[ModelData$MeretCleared<480,]
+
+
 
 ModelData$Location1<-as.factor(ModelData$Location1)
 
@@ -858,7 +881,7 @@ than for specificity.
 ##Bivariate correation
 Bivariate plot between every pair of attributes
 
-```{r bivariate heatmap,purl=FALSE}
+```{r bivariate heatmap,purl=FALSE,eval=FALSE}
 #Template used:http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization
 
 HeatMapTable <- TrainingSet[, c("RC_ArMil","MeretCleared","KozkoltsegFtho","RC_RoomNumLarge")]
@@ -930,9 +953,9 @@ pCT<-ggplot(data = TrainingSet, mapping = aes(x = RC_Title, y = RC_ArMil)) +
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 
-pEmeletet<-ggplot(data = TrainingSet, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
-  geom_boxplot() +
-  coord_cartesian(ylim = c(0, 100))
+#pEmeletet<-ggplot(data = TrainingSet, mapping = aes(x = RC_FLOOR, y = RC_ArMil)) + 
+#  geom_boxplot() +
+#  coord_cartesian(ylim = c(0, 100))
 
 
 
@@ -940,11 +963,11 @@ pAccess<-ggplot(data = TrainingSet, mapping = aes(x = RC_Accessability, y = RC_A
   geom_boxplot() +
   coord_cartesian(ylim = c(0, 100))
 
-grid.arrange(pKitchen, pAppliances, pAlarm,pWC,pAC,pAccess,pCT,pEmeletet, ncol=3)
+grid.arrange(pKitchen, pAppliances, pAlarm,pWC,pAC,pAccess,pCT, ncol=3)
 ```
 
 
-```{r visualisation,purl=FALSE}
+```{r visualisation,purl=FALSE,eval=FALSE}
 p5<-ggplot(data=TrainingSet)+
   geom_bar(mapping = aes(x = Kerulet), fill='orange')
 
@@ -973,24 +996,47 @@ p2<-ggplot(KeruletSummery, aes(Kerulet,RC_ArMil)) +
 grid.arrange(p1, p4, p3,p2,p5, ncol=2)
 ```
 
-```{r DummyVars,purl=FALSE}
+```{r DummyVars_BasicModels,purl=FALSE}
 #KeruletOnly
 TrainingSet$MC2<-TrainingSet$MeretCleared^2
 TrainingSet$MeretLog<-log(TrainingSet$MeretCleared)
 TrainingSet$LogMil<-log(TrainingSet$RC_ArMil)
 TrainingSet$MeretExp<-exp(TrainingSet$MeretCleared)
 
+
+#Limiting the dataset to the variables available to the exported version:
+
+XFiltered<-TrainingSet[,colnames(TrainingSet) %in% exportedcolumns & !colnames(TrainingSet) %in% c("SiteID","QueryTime","RC_ArMil")]
+#simple interactive linear regression using the well known FT/sqm measure. It requires an interactive effect which is added using a colon
+
 RC_ArMil<-TrainingSet$RC_ArMil
-simpleMod <- dummyVars(~MeretCleared + Kerulet+Kerulet:MeretCleared,
-                       data = TrainingSet,
-                       ## Remove the variable name from the
-                       ## column name
+SiteID<-TrainingSet$RC_ArMil
+QueryTime<-TrainingSet$QueryTime
+
+LM_Basic_Dummies <- dummyVars(~Kerulet+MeretCleared+Kerulet:MeretCleared,
+                       data = XFiltered,
                        levelsOnly = TRUE)
-WithInteract<-predict(simpleMod,TrainingSet)
+
+LM_Interact_Basic <- data.frame(XFiltered,predict(LM_Basic_Dummies,XFiltered))#adding the dummies
+LM_Interact_Basic<-LM_Interact_Basic[,!names(LM_Interact_Basic)%in% c("MeretCleared","Kerulet")] #Removing the precursors 
 
 
+LM_modelbasic <- train(x = LM_Interact_Basic, y = RC_ArMil,
+  method = "lm",
+  metric="RMSE",
+  trControl = TRC_CV10,
+  na.action="na.exclude")
 
-LM_model1<-train(y=RC_ArMil,x=WithInteract, method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+testResults <- data.frame(TrainingSet$SiteID,TrainingSet$QueryTime,XFiltered,RC_ArMil = RC_ArMil, Linear_Regression = predict(LM_modelbasic, LM_Interact_Basic))
+testResults$ErrorVal<-testResults$RC_ArMil-testResults$Linear_Regression
+LM_modelbasic
+#interaction only RMSE:15
+
+
+rfMode_Basic<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=XFiltered,ntrees = 1000)
+print(rfModel0)
+
+
 
 #negyzetes taggal
 LM_modelquad<-train(RC_ArMil~MeretCleared+MC2+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
@@ -1002,8 +1048,8 @@ print(LM_modelquad)
 LM_modelsimple<-train(RC_ArMil~MeretCleared+Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelsimple)
 
-LM_modelquadInteractio<-train(RC_ArMil~MeretCleared:Kerulet+MC2:Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
-print(LM_modelquadInteractio)
+LM_modelquadInteraction<-train(RC_ArMil~MeretCleared:Kerulet+MC2:Kerulet,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
+print(LM_modelquadInteraction)
 
 
 #withLOG
@@ -1017,9 +1063,7 @@ print(LM_modelquadInteractionwithLog)
 LM_modelquadInteractionwithexp<-train(RC_ArMil~MeretExp:Kerulet+MeretLog:Kerulet+MC2:Kerulet+MeretCleared:Kerulet+RC_Condition+RC_PARKING,data=TrainingSet,method="lm",metric="RMSE",trControl=TRC_CV10,model=T,na.action="na.exclude")
 print(LM_modelquadInteractionwithexp)
 
-
-
-````
+```
 
 
 
