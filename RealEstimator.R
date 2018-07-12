@@ -120,6 +120,7 @@ hirdetescrawler<-function(adurl,adAr=0){
   html_text()
   if(length(PicNums==1)){
   names(PicNums)<-"NumberOfPictures"
+  PicNums<-as.integer(as.character(PicNums))
   ValaszRecord<-cbind(ValaszRecord,PicNums)
   }
   
@@ -1227,6 +1228,11 @@ cat("Execution completed")
 
 # Sending a notification email
 library(knitr)
+rm(ProjectAdDetailList)
+rm(TestAdDetailList)
+rm(ProjectAdList)
+rm(TestAdDetailList2)
+
 runAllChunks("Analysis.rmd")
 library(gmailr)
 SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
