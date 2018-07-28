@@ -363,7 +363,8 @@ output$Snapshots<- renderPlot({
 output$PriceBoxPlot <- renderPlot({
   ggplot(data = FilteredRangedDataSet(), mapping = aes(x = SnapshotDate, y = RC_ArMil, group= SnapshotDate)) + 
     scale_x_date(name = 'SnapshotDate') +
-    geom_boxplot() +
+    geom_boxplot(outlier.shape = NA) +
+#    scale_y_continuous(limits = quantile(FilteredRangedDataSet()$RC_ArMil, c(0.1, 0.9))) +
     labs(x="Snapshot date",y="Price in MM HUF")
 })
 
@@ -434,7 +435,7 @@ output$PriceHistogram <- renderPlot({
 output$KeruletDiagram <- renderPlot({
   ggplot(data=FilteredRangedDataSet())+
     geom_bar(mapping = aes(x = Kerulet), fill='orange') +
-    labs(y="Ad volume",y="District")
+    labs(y="Ad volume",x="District")
 })
 
 output$FilteredTable <-renderTable({head(FilteredRangedDataSet()[, -which(names(FilteredRangedDataSet()) %in% c("SessionID", "StartTime","QueryTime","SnapshotDate"))])})
