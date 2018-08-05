@@ -1,8 +1,9 @@
 # impressum ---------------------------------------------------------------
 #"Jófogás ingatlan webscraping process"
 #written by: Istvan Juhasz
-#contact: https://github.com/JuhaszIstvan  
+#contact: https://github.com/JuhaszIstvan
 #to be executed daily.
+
 
 
 # setup -------------------------------------------------------------------
@@ -11,7 +12,14 @@
 rm(list=ls())
 closeAllConnections()
 Projectfolder<-"~/Documents/Code/R/Realestatimator"
+JobLogFile<-"currentjob.log"
+if (file.exists(JobLogFile)) file.remove(JobLogFile)
 setwd(Projectfolder)
+library(futile.logger)
+flog.threshold(TRACE)
+flog.appender(appender.tee(JobLogFile))
+flog.info("----- NEW EXECUTION STARTED -----")
+
 
 libraries<-c("rvest","stringi","data.table","sqldf","lubridate","dplyr","ggmap","mapproj","XML")
 
@@ -48,11 +56,11 @@ GenerateURL<-function(siteurl='https://ingatlan.jofogas.hu/',Sellbuy='s',Commodi
   if (exists("Minsize")){Mintag<-paste("min_size=",Minsize,"&",sep='')}else{Mintag<-NULL}
   if (exists("Maxsize")){Maxtag<-paste("max_size=",Maxsize,"&",sep='')}else{Maxtag<-NULL}
   if (exists("Sellbuy")){directiontag<-paste("st=",Sellbuy,"&",sep='')}else{Sellbuy<-NULL}
-    
+
   CheckUrl<-paste(siteurl,citytag,Commodity,"?",Maxtag,Mintag,"st=s", sep='')
 
 return(CheckUrl)
-}  
+}
 
 hirdetescrawler<-function(adurl,adAr=0){
 
@@ -60,19 +68,19 @@ hirdetescrawler<-function(adurl,adAr=0){
   SiteID<-substring(adurl,regexpr("\\_[^\\_]*$", adurl)[1]+1,regexpr("\\.[^\\.]*$", adurl)[1]-1)
   names(SiteID)<-"SiteID"
   ValaszRecord<-as.data.frame(SiteID)
-  
+
   #add SiteUrl
   SiteUrl<-adurl
   names(SiteUrl)<-"SiteUrl"
   ValaszRecord<-cbind(ValaszRecord,SiteUrl)
-  
-  #add Price 
-  #price is a bit tricky to mine from this site because it has 3 different values with 2 of them being being hidden after rendering. 
+
+  #add Price
+  #price is a bit tricky to mine from this site because it has 3 different values with 2 of them being being hidden after rendering.
   #BUT! I could get the data from the search results page so until i find the will to do it properly, i will pass the argument on like this  all is good.
   Ar<-adAr
   names(Ar)<-"Ar"
   ValaszRecord<-cbind(ValaszRecord,Ar)
-  
+
   #add execution time
   QueryTime<-Sys.time()
   ValaszRecord<-cbind(ValaszRecord,QueryTime)
@@ -91,7 +99,7 @@ hirdetescrawler<-function(adurl,adAr=0){
   ValaszRecord$QueryState<<-paste("ERROR: ",errorcondition$message)})
   if (ValaszRecord$QueryState!="No errors recorded")
     {return(ValaszRecord)}
-  
+
   Paraméterérték<-weblap %>%
     html_nodes(".parameters") %>%
     html_nodes(".reParamValue") %>%
@@ -100,7 +108,7 @@ hirdetescrawler<-function(adurl,adAr=0){
     html_nodes(".parameters") %>%
     html_nodes(".reParamLabel") %>%
     html_text()
-  
+
   names(Paraméterérték)<-Paramétercímke
   #Paraméterérték<-as.data.frame(t(Paraméterérték))
   ValaszRecord<-cbind(ValaszRecord,t(Paraméterérték))
@@ -113,7 +121,7 @@ hirdetescrawler<-function(adurl,adAr=0){
   names(Description)<-"Description"
   ValaszRecord<-cbind(ValaszRecord,Description)
   }
-  
+
   #add the number of pictures
   PicNums<-weblap %>%
   html_nodes(".number") %>%
@@ -123,8 +131,8 @@ hirdetescrawler<-function(adurl,adAr=0){
   PicNums<-as.integer(as.character(PicNums))
   ValaszRecord<-cbind(ValaszRecord,PicNums)
   }
-  
-  
+
+
   #add street(it can have multiple values)
   Loc_Street<-weblap %>%
     html_nodes(".street") %>%
@@ -143,7 +151,7 @@ hirdetescrawler<-function(adurl,adAr=0){
     names(PublishedTime)<-"Feladás ideje"
     ValaszRecord<-cbind(ValaszRecord,PublishedTime)
   }
-  
+
   #add hírdető neve
   Hirdeto<-weblap %>%
     html_nodes(".name") %>%
@@ -152,7 +160,7 @@ hirdetescrawler<-function(adurl,adAr=0){
     names(Hirdeto)<-"Hirdeto"
     ValaszRecord<-cbind(ValaszRecord,Hirdeto)
   }
-  
+
   #add coordinates
   Latitude<-weblap %>%
     html_nodes(".re_vi_map") %>%
@@ -161,7 +169,7 @@ hirdetescrawler<-function(adurl,adAr=0){
   names(Latitude)<-"Latitude"
   ValaszRecord<-cbind(ValaszRecord,Latitude)
   }
-  
+
   Longitude<-weblap %>%
     html_nodes(".re_vi_map") %>%
     html_attr("data-longitude")
@@ -176,33 +184,33 @@ CleanUpLakasData<-function(hirdetéstábla){
 
   #méret
   hirdetéstábla[,"Méret_Cleared"]<-as.numeric(as.character(gsub("[^0-9]","",hirdetéstábla[,"Méret:"])))
-  
+
   #rezsi
   hirdetéstábla[,"Közköltség_Fthó"]<-as.numeric(as.character(gsub("[^0-9]","",hirdetéstábla[,"Havi közösköltség:"])))
-  
+
   #szobák
   hirdetéstábla[,"SzobaSzám_Cleared"]<-as.numeric(as.character(gsub("[^0-9]","",hirdetéstábla[,"Szobák száma:"])))
-  
+
   # Dealing with naughty columns
   colnames(hirdetéstábla)<-tstsor2<-gsub("[^a-z^A-Z^0-9]","",iconv(colnames(hirdetéstábla), to="ASCII//TRANSLIT"))
   hirdetéstábla$konyha<-grepl("Beépített konyha",hirdetéstábla$Ingatlanfelszereltsege)
   hirdetéstábla$KulonWC<-grepl("Fürdő és WC külön",hirdetéstábla$Ingatlanfelszereltsege)
   hirdetéstábla$Legkondicinalo<-grepl("Légkondicíonáló",hirdetéstábla$Ingatlanfelszereltsege)
   hirdetéstábla$Gepesitett<-grepl("Gépesített",hirdetéstábla$Ingatlanfelszereltsege)
-  hirdetéstábla$Riaszto<-grepl("Riasztó",hirdetéstábla$Ingatlanfelszereltsege) 
+  hirdetéstábla$Riaszto<-grepl("Riasztó",hirdetéstábla$Ingatlanfelszereltsege)
   hirdetéstábla$Akadalymentesitett<-grepl("Akadálymentesített",hirdetéstábla$Ingatlanfelszereltsege)
 
- 
+
   #parsing the publish date. Unfortunately, the monthnames are in Hungarian locale, so we have to do an ol' R-switch-a-roo
-  # the year is not listed, I wonder how the conversion work post jan.01. If it fails, I will have to grab the year from the querydate or pipe it though a is.month < current.month gate. We shall see soon enough! 
+  # the year is not listed, I wonder how the conversion work post jan.01. If it fails, I will have to grab the year from the querydate or pipe it though a is.month < current.month gate. We shall see soon enough!
   #update: If the  date is larger(later) than the query time, the script decreases it  by one (year). This will produce odd numbers for ads who had been active for more than a year.
-  #nota bene, according to documentation of as.date, the locale format is OS dependent, this script uses  the format for linux (openSuse leap 42.3) 
+  #nota bene, according to documentation of as.date, the locale format is OS dependent, this script uses  the format for linux (openSuse leap 42.3)
   lct<-Sys.setlocale("LC_TIME")
   Sys.setlocale("LC_TIME", "hu_HU.UTF-8")
-  
+
      hirdetéstábla$PublishedTimeCleared<-as.POSIXct(ifelse(as.POSIXct(hirdetéstábla$PublishedTime,format='%B %d. %H:%M')>hirdetéstábla$QueryTime,as.POSIXct(hirdetéstábla$PublishedTime,format='%B %d. %H:%M')-dyears(1),as.POSIXct(hirdetéstábla$PublishedTime,format='%B %d. %H:%M')),origin='1970-01-01')
-  
-  
+
+
   #hirdetéstábla$PublishedTimeCleared<-as.Date(hirdetéstábla$PublishedTime,format='%B %d. %H:%M')
   Sys.setlocale("LC_TIME", "en_US.UTF-8")
   return(hirdetéstábla)
@@ -244,51 +252,51 @@ hirdeteslista <- function(weblap){
     html_nodes("div.jfg-item") %>%
     html_nodes("div.contentArea") %>%
     html_nodes(".priceBox") %>%
-    html_text() 
+    html_text()
 
   kistábla<-as.data.table(cbind(titles,links,ArRaw,Penznem))
   #kistábla[,Ar:= stri_replace_all_fixed(ArRaw,Penznem,"")][]
   kistábla[,Ar:= as.numeric(gsub(" ","",gsub(Penznem,"",ArRaw))), by=Penznem]
   kistábla[,SiteID:=substring(links,regexpr("\\_[^\\_]*$", links)[1]+1,regexpr("\\.[^\\.]*$", links)[1]-1), by=links]
-  
+
   return(kistábla)
 }
 
 MapAds<-function(CheckUrl,SessionID,ProjectName){
     webpage <- read_html(CheckUrl)
-  
+
   ##retrieving the number of total hits
   htmltempdata <- html_nodes(webpage,'div.re-all-count')
   totaltalálat<- html_text(htmltempdata)
-  
+
   if (totaltalálat!=""){
     nyitunk<-nchar('Összes hirdetés: ')+1
-    vége<-gregexpr(pattern =' db',totaltalálat)[[1]][1]-1  
+    vége<-gregexpr(pattern =' db',totaltalálat)[[1]][1]-1
     totáltalálat_kesz<-as.numeric(gsub(" ","",substring(totaltalálat,nyitunk,vége)))
     ResultNumber<<-totáltalálat_kesz
   } else {totáltalálat_kesz<- -9999}
     SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
     SessionTable[SessionTable$SessionID==SessionID,"ResultNumber"]<-as.integer(as.character(totáltalálat_kesz))
     saveRDS(SessionTable, file="SessionTable.Rda")
-  
+
   rm(vége)          #cleanup
   rm(nyitunk)       #cleanup
   rm(totaltalálat)  #cleanup
-  
+
   #Define the threshold in respect of the number of results in order to be able to prevent/interrupt executions that might spam the website.
-  
+
   TooMany<-29000
-  
+
   #initial sanity check on the result number using the values defined above
-  
+
   if (totáltalálat_kesz>TooMany){
-  print("ERROR: Execution skipped due to results exceeding threshold")
+  flog.fatal("ERROR: Execution skipped due to results exceeding threshold")
   }else if(totáltalálat_kesz>0)
     {
       #Beginning to browsing throughthe result pages
-      print(paste("Nonezero no. of results:", totáltalálat_kesz))
+    flog.info(paste("Nonezero no. of results:", totáltalálat_kesz))
       i<-0
-      #the repeat sections turns the pages until the new page variable is empty. 
+      #the repeat sections turns the pages until the new page variable is empty.
       repeat
         {
         z<-0
@@ -301,7 +309,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
           x <- try(eval(webpage<-read_html(CheckUrl)))
           if (inherits(x, "try-error"))
              {
-            print (paste("WARNING:","Failed to open:",CheckUrl))
+            flog.ERROR(paste("WARNING:","Failed to open:",CheckUrl))
              Sys.sleep(runif(1, 8, 15))
              }
            else
@@ -312,7 +320,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
         #Provided that the website variable didn't inherit an error, we may poceed, otherwise, it is dead, Jim
         if (inherits(x, "try-error"))
            {
-            print(paste("ERROR resolving link",CheckUrl,"Breaking execution"))
+          flog.ERROR(paste("ERROR resolving link",CheckUrl,"Breaking execution"))
             break}
             TempWebPage<-NULL
       TempWebPage = tryCatch({hirdeteslista(webpage)
@@ -321,13 +329,13 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
       }, error = function(error_message) {
         #print(paste("error",error_message))
         SaveTheWebPage<-TempWebPage
-      } 
+      }
       )
       if(exists("TempWebPage")){
           if(!exists("masszlista")){
           masszlista<-TempWebPage
           }else{
-            masszlista<-rbind(masszlista,TempWebPage)    
+            masszlista<-rbind(masszlista,TempWebPage)
           }
          }
 #this is where we zone in on the link to the last page. this isnt even being used for anything yet.
@@ -336,39 +344,39 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
         if (!is.null(htmltempdata)){ #if it doesnt exist, conclude that we are at the last page
           utolsó_oldal_link<-html_attr(htmltempdata,"href")
         } else {
-          print("ERROR hibás utolsó oldal link")
+          flog.ERROR("ERROR hibás utolsó oldal link")
           break
         }
 
         #this is where we zone in on the link to the next page
         htmltempdata <- html_nodes(webpage,'.jofogasicon-right')
         következő_oldal_link<-html_attr(htmltempdata,"href")
-        #Verify if we have  an URL ready 
+        #Verify if we have  an URL ready
         CheckUrl<-következő_oldal_link
         if(length(CheckUrl)==0) #if it doesnt exist, conclude that we are at the last page
         {
-          cat("No new URL is available")
+          flog.info("No new URL is available")
           break
         }
-        #randomised delay to avoid triggering spam protection 
+        #randomised delay to avoid triggering spam protection
 
         maszkido<-runif(1, 0.1, 2.23)
-        cat(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " second(s)\n"))
+        flog.trace(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " second(s)\n"))
         Sys.sleep(maszkido)
         #next cycle!
         }
-    
+
       if(nrow(masszlista)>0)
         {
         #drop duplicate items (due to reranking during execution)
         masszlista<-masszlista[!duplicated(masszlista[,2]),]
         masszlista$SessionID<-SessionID
         masszlista$ProjectName<-ProjectName
-        
+
         return(masszlista)
         }
       else
-      {cat("ERROR: The Return table is empty")
+      {flog.error("ERROR: The Return table is empty")
         return("ERROR: The Return table is empty")}
     }
 }
@@ -377,7 +385,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
 
 #Projects
 UseExistingProject<-TRUE #non-predefined projects will be missing necessary filenames and FAIL!
-#ProjectName<-"JofogasLakasokBpTest" 
+#ProjectName<-"JofogasLakasokBpTest"
 
 ProjectName<-"JofogasLakasokBPFull"
 
@@ -392,25 +400,25 @@ ProjectAdDetailList<-NULL
 CheckUrl<-NULL
 
 if (!file.exists(TableOfProjectsFile)){
-  print("ERROR: ProjectDataFile not found, exiting!")
+  flog.fatal("ERROR: ProjectDataFile not found, exiting!")
 } else {
-  print("SUCCESS: ProjectDataFile found")
+  flog.info("SUCCESS: ProjectDataFile found")
   TableOfProjects<-readRDS(file=TableOfProjectsFile)
 }
 
 if (!exists("TableOfProjects")){
-  print("ERROR: Failed to load the Project Data File!")
+  flog.fatal("ERROR: Failed to load the Project Data File!")
 } else {
   if (!exists("ProjectName")){
-  print("ERROR: No Project Name available!")
+    flog.fatal("ERROR: No Project Name available!")
   } else {
-    print("Project Name available!")
+    flog.info("Project Name available!")
     ProjectData<-TableOfProjects[TableOfProjects$ProjectName==ProjectName,]
     if (!exists("ProjectData")){
-      print("ERROR: The Project record could not be retrieved!")
+      flog.fatal("ERROR: The Project record could not be retrieved!")
     } else{
-      if(nrow(ProjectData)!=1){ 
-        print("ERROR: Project name is not unambigous!")
+      if(nrow(ProjectData)!=1){
+        flog.fatal("ERROR: Project name is not unambigous!")
       }
     }
   }
@@ -420,39 +428,39 @@ if (exists("ProjectData")){
   ProjectAdListFile<-ProjectData$ProjectAdListFile
   ProjectAdDetailListFile<-ProjectData$ProjectAdDetailListFile
   CheckUrl<-ProjectData$ProjectURL
-  print(paste("Project Name:",ProjectName,sep=''))
-  print(paste("ProjectAdListFile:", ProjectAdListFile,sep=''))
-  print(paste("ProjectAdDetailListFile:", ProjectAdDetailListFile,sep=''))
-  print(paste("CheckUrl:", CheckUrl,sep=''))
+  flog.info(paste("Project Name:",ProjectName,sep=''))
+  flog.info(paste("ProjectAdListFile:", ProjectAdListFile,sep=''))
+  flog.info(paste("ProjectAdDetailListFile:", ProjectAdDetailListFile,sep=''))
+  flog.info(paste("CheckUrl:", CheckUrl,sep=''))
 }
-print('Overture')
+flog.info('Overture')
 
 if(UseExistingProject==FALSE){
   CheckUrl<-GenerateURL(Commodity='lakas', City ='budapest')
-  print(paste("Calculated url:",CheckUrl))
+  flog.info(paste("Calculated url:",CheckUrl))
 }
 #getting a SessionID
 
- #Open sessionTable. I am loading and saving the sessiontable all the time because a I don't know how to be thead-safe in R  yet. 
+ #Open sessionTable. I am loading and saving the sessiontable all the time because a I don't know how to be thead-safe in R  yet.
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   #generate the new Session
   start.time<-Sys.time()
   SessionID<-paste(ProjectName,"_",format(Sys.time(),"%Y%m%d_%H%M"),stri_rand_strings(n=1, length=2, pattern="[A-Z0-9]"),sep='')
   NewSession<-as.data.frame(list(ProjectName,SessionID,start.time,start.time,0,0,"Not completed"))
   names(NewSession)<-c("ProjectName","SessionID","StartTime","EndTime","RunTime","ResultNumber","Status")
-  SessionTable<-merge(SessionTable,NewSession,all=TRUE) 
+  SessionTable<-merge(SessionTable,NewSession,all=TRUE)
   saveRDS(SessionTable, file="SessionTable.Rda")
 
 #if we have an URL available, we should scratch it into our tracker then proceed to interpret it.
 if(!exists("CheckUrl")){
-  print("ERROR: NO URL Available!") 
+  flog.fatal("ERROR: NO URL Available!")
 } else {
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   SessionTable[SessionTable$SessionID==SessionID,"URL"]<-CheckUrl
   saveRDS(SessionTable, file="SessionTable.Rda")
 #collecting the ad listings.
   ProjectCurrentAdList<-MapAds(CheckUrl = CheckUrl,SessionID = SessionID,ProjectName=ProjectName)
-#The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done. 
+#The script urrently uses the sorted filelist of the project directory. this is not robust an requies adherence to a naming pattern. A proper solution is using the SessionTable to track the files as it was originally intended to be done.
 #Update:The file names are stored and retrieved from the SessionTables instead
   ProjectCurrentAdListFile<-paste(getwd(),"/BackUp/",SessionID,"_CurrentAdList.Rda",sep='')
   saveRDS(ProjectCurrentAdList, file=ProjectCurrentAdListFile)
@@ -460,7 +468,7 @@ if(!exists("CheckUrl")){
   #in case something goes wonky, a backup is  generated prior to  touching the files. Since they are uniquely dated, a cleanup process should be deployed to avoid excessive disk usage. This, however, had not been automated yet.
   ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
   file.copy(ProjectAdListFile, paste(getwd(),"/BackUp/",ProjectAdListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup",sep=''))
-  
+
   ProjectAdList<-merge(ProjectAdList,ProjectCurrentAdList,all=TRUE)
   saveRDS(ProjectAdList, file=ProjectAdListFile)
 
@@ -475,20 +483,20 @@ if(!exists("CheckUrl")){
   SessionTable[SessionTable$SessionID==SessionID,"EndTime"]<-end.time
   SessionTable[SessionTable$SessionID==SessionID,"RunTime"]<-time.taken
 }
-if (!exists("ProjectCurrentAdList")){  
+if (!exists("ProjectCurrentAdList")){
   SessionTable[SessionTable$SessionID==SessionID,"Status"]<-"No Data received"
 }else{
-  SessionTable[SessionTable$SessionID==SessionID,"Status"]<-"Completed"  
+  SessionTable[SessionTable$SessionID==SessionID,"Status"]<-"Completed"
   SessionTable[SessionTable$SessionID==SessionID,"ReceivedAds"]<-nrow(ProjectCurrentAdList)
 }
-print(paste("Execution time:",time.taken))
+flog.info(paste("Execution time:",time.taken))
 saveRDS(SessionTable, file="SessionTable.Rda")
-  
-print('The AD mappings have been finished.')
+
+flog.info('The AD mappings have been finished.')
 
 # Collecting_the_new_or_changed_ads ---------------------------------------
 
-#merging the data with the basic data table. The new definitions should be moved to the top. 
+#merging the data with the basic data table. The new definitions should be moved to the top.
 #Load the cumulated dataset
 
 SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
@@ -499,8 +507,8 @@ ProjectAdList<-readRDS(file=ProjectAdListFile, refhook =NULL)
 ProjectAdDetailList<-readRDS(file=ProjectAdDetailListFile, refhook =NULL)
 
 if(exists("ProjectCurrentAdDetailList")){rm(ProjectCurrentAdDetailList)}
-#check the ads that have disappeared  
-#I am using the SQL query instead of normal data.frame operations because this kind of data is exactly the kind that is best stored in a proper RDBMS. To my greatest chagrim, sqlite can't handle outer joins. 
+#check the ads that have disappeared
+#I am using the SQL query instead of normal data.frame operations because this kind of data is exactly the kind that is best stored in a proper RDBMS. To my greatest chagrim, sqlite can't handle outer joins.
 #it is time to close these ads:( #these are the queries from the current project that are completed ( we dont want to have an incomplete query to prematurely close ads, now do we? )
 
 
@@ -517,23 +525,23 @@ if(nrow(AdsThatHaveDisappeared)>0){
   #We are selecting the penultimate (previous) session of this Project
   ProjectSessions<- sqldf(sprintf('SELECT SessionID,ProjectName,StartTime,EndTime,Status FROM SessionTable WHERE ProjectName="%s" AND Status="Completed" order by StartTime DESC',ProjectName))
   saveRDS(SessionTable, file="SessionTable.Rda")
-  
-  #Check if the first in the line is our current session, it kinda has to.  
+
+  #Check if the first in the line is our current session, it kinda has to.
   CurrentSessionRecord<-ProjectSessions[1,]
   PreviousSessionRecord<-ProjectSessions[2,]
-  
+
   if(CurrentSessionRecord$SessionID==SessionID)
   {
     PublishedBecsultEndtTime<-(CurrentSessionRecord$StartTime -     PreviousSessionRecord$StartTime)/2+PreviousSessionRecord$StartTime
     ProjectAdDetailList<-sqldf(c(sprintf('UPDATE ProjectAdDetailList SET PublishEndTime="%f" WHERE SiteID IN (SELECT SiteID FROM AdsThatHaveDisappeared)',PublishedBecsultEndtTime),'select * from main.ProjectAdDetailList'))
- 
+
     file.copy(ProjectAdDetailListFile, paste(getwd(),"/BackUp/",ProjectAdDetailListFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
     saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
-  
-  } else {print("ERROR: SessionTAble has an issue with the SessionID")}
-} else {print("WARNING: No records to be closed")}
-  
-#Checking if there are ads that need to be reopened. The entries which are scanned in the current session, BUT have non-null end time in the detailtable. 
+
+  } else {flog.fatal("ERROR: SessionTAble has an issue with the SessionID")}
+} else {flog.warn("WARNING: No records to be closed")}
+
+#Checking if there are ads that need to be reopened. The entries which are scanned in the current session, BUT have non-null end time in the detailtable.
 AdsThatHaveBeenReopened <- sqldf('SELECT DISTINCT SiteID FROM ProjectAdDetailList WHERE PublishEndTime IS NOT NULL INTERSECT SELECT DISTINCT SiteID FROM ProjectCurrentAdList')
 
 
@@ -561,39 +569,37 @@ if(nrow(AdsToBeCollected)>0){
   #Fetching the links to these Ads
   AdsToBeCollected<-sqldf('SELECT AdsToBeCollected.*,SUM.links
   from AdsToBeCollected
-  INNER JOIN 
+  INNER JOIN
   ProjectCurrentAdList SUM
-  ON 
+  ON
   AdsToBeCollected.SiteID = SUM.SiteID')
   start.time<-Sys.time()
   SessionTable<-readRDS(file="SessionTable.Rda", refhook =NULL)
   SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailStatus"]<-"Started"
   SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailStartTime"]<-start.time
   saveRDS(SessionTable, file="SessionTable.Rda")
-  
+
   i<-0
   lenfetch<-nrow(AdsToBeCollected)
-  for(index in 1:lenfetch)
-    {
+  for(index in 1:lenfetch){
       link = as.character(AdsToBeCollected[index,'links'])
       Ar = as.numeric(as.character(AdsToBeCollected[index,'Ar']));
       i<-i+1
-      print(paste('CL:',i,'/',lenfetch,' ',link,sep=''))
+      maszkido<-runif(1, 0.1, 2.23)
+      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' várunk: ',maszkido, ' másodpercet',sep=''))
       hirdetesdata<-hirdetescrawler(adurl=link,adAr=Ar)
-    
+
       #sanity check for the collected 1-row data.frame
       if(!exists("ProjectCurrentAdDetailList")){
-        print('ProjectCurrentAdDetailList nem létezik, creating')
+        flog.info('ProjectCurrentAdDetailList nem létezik, creating')
         ProjectCurrentAdDetailList<-hirdetesdata
       }else{
-        ProjectCurrentAdDetailList<-merge(ProjectCurrentAdDetailList,hirdetesdata,all=TRUE) 
-        maszkido<-runif(1, 0.1, 2.23)
-        cat('várunk: ',maszkido, ' másodpercet',"\n")
+        ProjectCurrentAdDetailList<-merge(ProjectCurrentAdDetailList,hirdetesdata,all=TRUE)
         Sys.sleep(maszkido)
       }
   }
   #check how many ads we failed to pull and run them again. Most error cases in the past were due to outages in the internet connection (VPN *cough cough*)
-  
+
   redotable<-ProjectCurrentAdDetailList[ProjectCurrentAdDetailList$QueryState!="No errors recorded" & ProjectCurrentAdDetailList$QueryState!="ERROR:  HTTP error 410.",]
   if (nrow(redotable)>0){
     AdsToBeCollected<-redotable
@@ -603,16 +609,15 @@ if(nrow(AdsToBeCollected)>0){
       link = as.character(AdsToBeCollected[index,'SiteUrl'])
       Ar = as.numeric(as.character(AdsToBeCollected[index,'Ar']));
       i<-i+1
-      print(paste('CL:',i,'/',lenfetch,' ',link,sep=''))
+      maszkido<-runif(1, 0.1, 2.23)
+      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' várunk: ',maszkido, ' másodpercet',sep=''))
       hirdetesdata<-hirdetescrawler(adurl=link,adAr=Ar)
-    
+
       #sanity check for the collected data.frame
       if(!exists("ProjectCurrentAdDetailList")){
         ProjectCurrentAdDetailList<-hirdetesdata
       }else{
-        ProjectCurrentAdDetailList<-merge(ProjectCurrentAdDetailList,hirdetesdata,all=TRUE) 
-        maszkido<-runif(1, 0.1, 3.23)
-        cat('várunk: ',maszkido, ' másodpercet',"\n")
+        ProjectCurrentAdDetailList<-merge(ProjectCurrentAdDetailList,hirdetesdata,all=TRUE)
         Sys.sleep(maszkido)
       }
     }
@@ -623,10 +628,10 @@ if(nrow(AdsToBeCollected)>0){
 }
 
 if(exists('ProjectCurrentAdDetailList')){
-    print("Merging newly added detailtables")
+  flog.info("Merging newly added detailtables")
     ProjectAdDetailList<-merge(ProjectAdDetailList,ProjectCurrentAdDetailList,all=TRUE)
 }else{
-    print ("WARNING No new Table to add")
+  flog.warn("WARNING No new Table to add")
 }
 
 end.time<-Sys.time()
@@ -637,7 +642,7 @@ SessionTable[SessionTable$SessionID==SessionID,"QueryAdDetailStatus"]<-"Complete
 saveRDS(SessionTable, file="SessionTable.Rda")
 saveRDS(ProjectAdDetailList, file=ProjectAdDetailListFile)
 
-print("End of the main function")
+flog.info("End of the main function")
 
 
 # Post-processing ---------------------------------------------------------
@@ -681,7 +686,7 @@ saveRDS(ProjectAdList, file=ProjectAdListFile)
 
 
 # LocationWrangling -------------------------------------------------------
-# This section is responsible for correcting common typos misspellings and alternate names. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data. 
+# This section is responsible for correcting common typos misspellings and alternate names. It was a necessary to do SOMETHING in order to be able to begin actually fitting regressions on the data.
 
 
 replaceMe<-function(df,from,to,level='LocStreet1'){
@@ -689,7 +694,7 @@ replaceMe<-function(df,from,to,level='LocStreet1'){
   df[tolower(trimws(df$LocStreet2))==tolower(from),'LocStreet2']<-to
   return(df)
 }
- 
+
 ProjectName="JofogasLakasokBPFull"
 SessionTableFile<-"SessionTable.Rda"
 SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
@@ -713,7 +718,7 @@ TestAdDetailList<-TestAdDetailList[!duplicated(TestAdDetailList[c("MeretCleared"
 
 
 TestAdDetailList$LocStreet1<-gsub("\\d", "", TestAdDetailList$LocStreet1)
-TestAdDetailList$LocStreet2<-gsub("\\d", "", TestAdDetailList$LocStreet2) 
+TestAdDetailList$LocStreet2<-gsub("\\d", "", TestAdDetailList$LocStreet2)
 
 TestAdDetailList$LocStreet1<-trimws(TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-trimws(TestAdDetailList$LocStreet2)
@@ -722,16 +727,16 @@ TestAdDetailList$LocStreet1<-stri_trans_general(TestAdDetailList$LocStreet1, id 
 TestAdDetailList$LocStreet2<-stri_trans_general(TestAdDetailList$LocStreet2, id = "Title")
 
 TestAdDetailList$LocStreet1<-trimws(gsub(" Környéke$", "", TestAdDetailList$LocStreet1))
-TestAdDetailList$LocStreet2<-trimws(gsub(" Környéke$", "", TestAdDetailList$LocStreet2)) 
+TestAdDetailList$LocStreet2<-trimws(gsub(" Környéke$", "", TestAdDetailList$LocStreet2))
 
-TestAdDetailList$LocStreet1<-trimws(gsub(" St$", " Sétány", TestAdDetailList$LocStreet1)) 
+TestAdDetailList$LocStreet1<-trimws(gsub(" St$", " Sétány", TestAdDetailList$LocStreet1))
 TestAdDetailList$LocStreet2<-trimws(gsub(" St$", " Sétány", TestAdDetailList$LocStreet2))
 
-TestAdDetailList$LocStreet1<-trimws(gsub("\\(", "", TestAdDetailList$LocStreet1)) 
-TestAdDetailList$LocStreet2<-trimws(gsub("\\(", "", TestAdDetailList$LocStreet2)) 
+TestAdDetailList$LocStreet1<-trimws(gsub("\\(", "", TestAdDetailList$LocStreet1))
+TestAdDetailList$LocStreet2<-trimws(gsub("\\(", "", TestAdDetailList$LocStreet2))
 
-TestAdDetailList$LocStreet1<-trimws(gsub(")", "", TestAdDetailList$LocStreet1)) 
-TestAdDetailList$LocStreet2<-trimws(gsub(")", "", TestAdDetailList$LocStreet2)) 
+TestAdDetailList$LocStreet1<-trimws(gsub(")", "", TestAdDetailList$LocStreet1))
+TestAdDetailList$LocStreet2<-trimws(gsub(")", "", TestAdDetailList$LocStreet2))
 
 
 TestAdDetailList$LocStreet1<-trimws(gsub(" Krt[.]{0,1}$", " Körút", TestAdDetailList$LocStreet1) )
@@ -750,7 +755,7 @@ TestAdDetailList$LocStreet1<-trimws(gsub("Külső ", "Külső-", TestAdDetailLis
 TestAdDetailList$LocStreet2<-trimws(gsub("Külső ", "Külső-", TestAdDetailList$LocStreet2) )
 
 TestAdDetailList$LocStreet1<-trimws(gsub(" Környékén$", "", TestAdDetailList$LocStreet1))
-TestAdDetailList$LocStreet2<-trimws(gsub(" Környékén$", "", TestAdDetailList$LocStreet2)) 
+TestAdDetailList$LocStreet2<-trimws(gsub(" Környékén$", "", TestAdDetailList$LocStreet2))
 
 TestAdDetailList$LocStreet1<-gsub(" Közelében$", "", TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-gsub(" Közelében$", "", TestAdDetailList$LocStreet2)
@@ -758,29 +763,29 @@ TestAdDetailList$LocStreet2<-gsub(" Közelében$", "", TestAdDetailList$LocStree
 TestAdDetailList$LocStreet1<-gsub(" Közepe$", "", TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-gsub(" Közepe$", "", TestAdDetailList$LocStreet2)
 
-TestAdDetailList$LocStreet2<-gsub(" Ltp", " Lakótelep", TestAdDetailList$LocStreet2) 
-TestAdDetailList$LocStreet1<-gsub(" Ltp", " Lakótelep", TestAdDetailList$LocStreet1) 
+TestAdDetailList$LocStreet2<-gsub(" Ltp", " Lakótelep", TestAdDetailList$LocStreet2)
+TestAdDetailList$LocStreet1<-gsub(" Ltp", " Lakótelep", TestAdDetailList$LocStreet1)
 
-TestAdDetailList$LocStreet1<-gsub("Bartok", "Bartók", TestAdDetailList$LocStreet1) 
-TestAdDetailList$LocStreet2<-gsub("Bartok", "Bartók", TestAdDetailList$LocStreet2) 
+TestAdDetailList$LocStreet1<-gsub("Bartok", "Bartók", TestAdDetailList$LocStreet1)
+TestAdDetailList$LocStreet2<-gsub("Bartok", "Bartók", TestAdDetailList$LocStreet2)
 
-TestAdDetailList$LocStreet1<-gsub("Karoly", "Károly", TestAdDetailList$LocStreet1) 
-TestAdDetailList$LocStreet2<-gsub("Karoly", "Károly", TestAdDetailList$LocStreet2) 
+TestAdDetailList$LocStreet1<-gsub("Karoly", "Károly", TestAdDetailList$LocStreet1)
+TestAdDetailList$LocStreet2<-gsub("Karoly", "Károly", TestAdDetailList$LocStreet2)
 
-TestAdDetailList$LocStreet1<-gsub("Adrássy", "Andrássy", TestAdDetailList$LocStreet1) 
+TestAdDetailList$LocStreet1<-gsub("Adrássy", "Andrássy", TestAdDetailList$LocStreet1)
 TestAdDetailList$LocStreet2<-gsub("Adrássy", "Andrássy", TestAdDetailList$LocStreet2)
 
-TestAdDetailList$LocStreet1<-gsub(" Ut$"," Út", TestAdDetailList$LocStreet1,ignore.case = TRUE) 
+TestAdDetailList$LocStreet1<-gsub(" Ut$"," Út", TestAdDetailList$LocStreet1,ignore.case = TRUE)
 TestAdDetailList$LocStreet2<-gsub(" Ut$"," Út",TestAdDetailList$LocStreet2,ignore.case = TRUE)
 
-TestAdDetailList$LocStreet2<-gsub(" U$[.]{0,1}$", " Utca", TestAdDetailList$LocStreet2,ignore.case = TRUE) 
-TestAdDetailList$LocStreet1<-gsub(" U$[.]{0,1}$", " Utca", TestAdDetailList$LocStreet1,ignore.case = TRUE) 
+TestAdDetailList$LocStreet2<-gsub(" U$[.]{0,1}$", " Utca", TestAdDetailList$LocStreet2,ignore.case = TRUE)
+TestAdDetailList$LocStreet1<-gsub(" U$[.]{0,1}$", " Utca", TestAdDetailList$LocStreet1,ignore.case = TRUE)
 
-TestAdDetailList$LocStreet1<-gsub(" Úton", " Út", TestAdDetailList$LocStreet1,ignore.case = TRUE) 
-TestAdDetailList$LocStreet2<-gsub(" Úton", " Út", TestAdDetailList$LocStreet2,ignore.case = TRUE) 
+TestAdDetailList$LocStreet1<-gsub(" Úton", " Út", TestAdDetailList$LocStreet1,ignore.case = TRUE)
+TestAdDetailList$LocStreet2<-gsub(" Úton", " Út", TestAdDetailList$LocStreet2,ignore.case = TRUE)
 
-TestAdDetailList$LocStreet1<-gsub(" Útnál", " Út", TestAdDetailList$LocStreet1,ignore.case = TRUE) 
-TestAdDetailList$LocStreet2<-gsub(" Útnál", " Út", TestAdDetailList$LocStreet2,ignore.case = TRUE) 
+TestAdDetailList$LocStreet1<-gsub(" Útnál", " Út", TestAdDetailList$LocStreet1,ignore.case = TRUE)
+TestAdDetailList$LocStreet2<-gsub(" Útnál", " Út", TestAdDetailList$LocStreet2,ignore.case = TRUE)
 
 
 TestAdDetailList$LocStreet1<-trimws(gsub("[VIX]{0,5}[.]{0,1}[ ]{0,1}kerület[i]{0,1}","",TestAdDetailList$LocStreet1,ignore.case = TRUE))
@@ -1082,7 +1087,7 @@ saveRDS(ProjectAdDetailList,file = ProjectAdDetailListFile)
 #reverse geocoding will give us the postal names of these location. A major issue here is that the coordinates are generated by looking up the provided location data on google map. Unfortunately, as of the writing of this comment - 2018-04-28 - the site uses freetext instead of a closed list meaning that it sometimes recognises the wrong street or nothing at all producing bogus coordinates.
 #Truth to be told, if jofogas limited the acceptable values, the whole coordinate thing wouldn't even be necessary.
 
-cat("Beginning the execution of the chunk: Reverse_Geocoding")
+flog.INFO("Beginning the execution of the chunk: Reverse_Geocoding")
 
 CoordinateTableFile<-"CoordinateTable.Rda"
 file.copy(CoordinateTableFile, paste(getwd(),"/BackUp/",CoordinateTableFile,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
@@ -1125,28 +1130,28 @@ for(b in 1:length(CoordinateCurrentTable$Latitude)){
   if(is.na(CoordinateCurrentTable[b,'Zip'])){
     k<-k+1
     for(G in 1:maxattempts){
-      cat(paste("\n",k,'\\' ,TotalNum," Attpt ",G,'|',CoordinateCurrentTable$Longitude[b]," ",CoordinateCurrentTable$Latitude[b], " : ",sep=""))
+      flog.trace(paste("\n",k,'\\' ,TotalNum," Attpt ",G,'|',CoordinateCurrentTable$Longitude[b]," ",CoordinateCurrentTable$Latitude[b], " : ",sep=""))
       result = tryCatch({
         revgeocode(c(as.numeric(CoordinateCurrentTable$Longitude[b]),as.numeric(CoordinateCurrentTable$Latitude[b])), output = "all",override_limit=TRUE,messaging = FALSE)
       }, warning = function(warning_message) {
         #print(warning_message)
       }, error = function(error_message) {
         #print(paste("error",error_message))
-      } 
+      }
       )
       if (exists("result")&& !is.null(result) && length(result)>1 && !is.null(result$result) && result$status=="OK")
       {
         break}
       else{
-        cat(" Result is no good, Boss")}
+        flog.trace(" Result is no good, Boss")}
       Sys.sleep(2)
       if(G==maxattempts){
-        stop("The number of attempts has reached the predefined limit.")
+        stop(flog.trace("The number of attempts has reached the predefined limit."))
       }
     }
     if(!is.null(result)){
       CoordinateCurrentTable[b,'Status']<-result$status
-      cat(paste(result$status,"\n"))
+      flog.trace(paste(result$status,"\n"))
       if(result$status=="OK"){
         Results<-result$results
         saveme<-Results
@@ -1189,14 +1194,12 @@ for(b in 1:length(CoordinateCurrentTable$Latitude)){
       }
     }else{
       saveRDS(CoordinateCurrentTable,file=paste(getwd(),"/BackUp/",CoordinateCurrentTable,"_",format(Sys.time(),"%Y%m%d_%H%M"),"_backup.Rda",sep=''))
-      
-      
-      stop("Not enough observations")
+      stop(flog.info("Not enough observations"))
     }
   }
 }
 
-print(length(which(is.na(CoordinateCurrentTable$Zip),TRUE)))
+flog.info(length(which(is.na(CoordinateCurrentTable$Zip),TRUE)))
 CoordinateCurrentTable<-CoordinateCurrentTable[!is.na(CoordinateCurrentTable$Zip),]
 CoordinateCurrentTable<-CoordinateCurrentTable[with(CoordinateCurrentTable, order(Zip,decreasing = T)),]
 CoordinateCurrentTable<-CoordinateCurrentTable[!duplicated(CoordinateCurrentTable[c("Longitude","Latitude")]),]
@@ -1224,25 +1227,34 @@ saveRDS(ProjectAdDetailList,file=ProjectAdDetailListFile)
 if(exists("ProjectAdList")){rm(ProjectAdList)}
 
 # Producing the report ----------------------------------------------------
-cat("Execution completed")
+flog.info("Execution completed")
 
 # Sending a notification email
-library(knitr)
+
 rm(ProjectAdDetailList)
 rm(TestAdDetailList)
 rm(ProjectAdList)
 rm(TestAdDetailList2)
 
+flog.info("STARTING: Analysis.R chunks")
 runAllChunks("Analysis.rmd")
 library(gmailr)
+flog.info("Email Sent")
 SessionTable<-readRDS(file=SessionTableFile, refhook =NULL)
 SessionRecord<-SessionTable[SessionTable$SessionID==SessionID,]
 ForShowTable<-t(SessionRecord)
 colnames(ForShowTable)<-c("Value")
-reportbody<-knitr::kable(ForShowTable,format="html", pad=0)
-mime() %>%
-  to(ProjectData$NotificationTo) %>%
-  from(ProjectData$NotificationFrom) %>%
-  subject(paste("Data Collection Completed: ", SessionID)) %>%
-  html_body(reportbody) -> text_msg
-send_message(text_msg)
+
+library(mailR)
+email <- send.mail(from = ProjectData$NotificationFrom,
+                   to = ProjectData$NotificationTo,
+                   subject = paste("Data Collection Completed: ", SessionID),
+                   body = paste0(capture.output(ForShowTable), collapse = "\n"),
+                   encoding = "utf-8",
+                   attach.files = c(JobLogFile),
+                   smtp = list(host.name = "smtp.gmail.com", port = 465, user.name = ProjectData$NotificationFrom, passwd = ProjectData$EmailPassw, ssl = T),
+                   authenticate = TRUE,
+                   send = TRUE)
+
+flog.info("Email Sent")
+flog.info("----- NEW EXECUTION COMPLETED -----")
