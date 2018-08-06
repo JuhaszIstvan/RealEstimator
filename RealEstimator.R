@@ -361,7 +361,7 @@ MapAds<-function(CheckUrl,SessionID,ProjectName){
         #randomised delay to avoid triggering spam protection
 
         maszkido<-runif(1, 0.1, 2.23)
-        flog.trace(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=3), " second(s)\n"))
+        flog.trace(paste('CL: ',CheckUrl,"w8ing ", format(round(maszkido,3),nsmall=2), " sec."))
         Sys.sleep(maszkido)
         #next cycle!
         }
@@ -586,7 +586,7 @@ if(nrow(AdsToBeCollected)>0){
       Ar = as.numeric(as.character(AdsToBeCollected[index,'Ar']));
       i<-i+1
       maszkido<-runif(1, 0.1, 2.23)
-      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' várunk: ',maszkido, ' másodpercet',sep=''))
+      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' w8ing: ',format(round(maszkido,3),nsmall=2), ' sec.',sep=''))
       hirdetesdata<-hirdetescrawler(adurl=link,adAr=Ar)
 
       #sanity check for the collected 1-row data.frame
@@ -610,7 +610,7 @@ if(nrow(AdsToBeCollected)>0){
       Ar = as.numeric(as.character(AdsToBeCollected[index,'Ar']));
       i<-i+1
       maszkido<-runif(1, 0.1, 2.23)
-      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' várunk: ',maszkido, ' másodpercet',sep=''))
+      flog.trace(paste('CL:',i,'/',lenfetch,' ',link,' w8ing ', format(round(maszkido,3),nsmall=2), ' secs',sep=''))
       hirdetesdata<-hirdetescrawler(adurl=link,adAr=Ar)
 
       #sanity check for the collected data.frame
