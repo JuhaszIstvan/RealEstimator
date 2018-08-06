@@ -58,7 +58,9 @@ JofogasLakasokBPFull_20180101_23295P
 ```{r setup, results='hide',message=FALSE}
 library(futile.logger)
 flog.threshold(TRACE)
-flog.appender(appender.tee("Analysis.log"))
+if(!exists("JobLogFile")){JobLogFile<-"Analysis.log"}
+
+flog.appender(appender.tee(JobLogFile))
 flog.info("----- NEW EXECUTION STARTED -----")
 library(caret)
 library(Amelia)
@@ -161,6 +163,7 @@ AnalysisAdDetailList$RC_ArMil<-AnalysisAdDetailList$Ar/1000000
 AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$RC_ArMil),]
 ggplot(data = AnalysisAdDetailList) +
   geom_histogram(mapping = aes(x = RC_ArMil), binwidth = 10)
+
 flog.info("FINISHED: wrangling_Ar")
 ```
 Whoa can't even see these outliers
@@ -173,7 +176,7 @@ ggplot(data = AnalysisAdDetailList[with(AnalysisAdDetailList, order(RC_ArMil,dec
 flog.info("FINISHED: wrangling_Ar2")
 ```
 
-The response variable is negatively skewed. a logarithmic transformation might be in order. 
+The response variable is negatively skewed. A logarithmic transformation might be in order. 
 
 
 The principal numerical pedictive attributes  are floor size (MeretCleared), condiniumal costs, number of rooms and half rooms (rooms whose size falls below 12 sq metersor 129 square feet)  
@@ -772,6 +775,28 @@ write.csv(AdPairs,file="correctedpairs.csv")
 #LongfuzzyrpairsDefault<-compare.dedup(DedupeTestLong, blockfld =c("Kerulet","MeretCleared"), strcmp = TRUE, )
 flog.info("FINISHED: RecordLinkage")
 ```
+#Feature Engineering
+I am going to ditch unspecified sale types then do a skewedness analysis
+
+
+
+
+```{r Feature_engineering}
+library(psych)
+AnalysisAdDetailList2<-AnalysisAdDetailList[AnalysisAdDetailList$RC_Title=="Title_Ownership",]
+AnalysisAdDetailList2<-AnalysisAdDetailList2[AnalysisAdDetailList2$RC_ArMil>4,]
+skew(AnalysisAdDetailList2$RC_ArMil)
+qqnorm(AnalysisAdDetailList2$RC_ArMil)
+qqline(AnalysisAdDetailList2$RC_ArMil)
+AnalysisAdDetailList2$RC_ArMil <- log(AnalysisAdDetailList2$RC_ArMil)
+skew(AnalysisAdDetailList2$RC_ArMil)
+qqnorm(AnalysisAdDetailList2$RC_ArMil)
+qqline(AnalysisAdDetailList2$RC_ArMil)
+ggplot(data= AnalysisAdDetailList2, aes(x=RC_ArMil)) +
+        geom_histogram() + labs(x='Price Historgram')
+
+
+```
 
 #Data Splitting and Cross-validation
 
@@ -846,6 +871,7 @@ flog.info("FINISHED: data_partitioning")
 ##Cross_Validation
 ```{r cross_validation,purl=FALSE}
 TRC_CV10<-trainControl(method="CV", number=10)
+TRC_CV5<-trainControl(method="CV", number=5)
 flog.info("FINISHED: cross_validation")
 ```
 
@@ -1057,20 +1083,27 @@ flog.info("FINISHED: DummyVars_BasicModels")
 
 #Random Forest
 ```{r DummyVars_RandomForest,purl=FALSE}
-mtryGrid <- data.frame(mtry = floor(seq(10, ncol(XFiltered), length = 1)))
+mtryGrid <- data.frame(mtry = floor(seq(1, ncol(XFiltered), length = 1)))
 
  rfTune <- train(x = XFiltered, y = RC_ArMil,
                  method = "rf",
                  tuneGrid = mtryGrid,
-                 ntree = 1000,
+                 ntree = 200,
                  importance = TRUE,
                  trControl = TRC_CV10)
 
 
-
-
-rfMode_Basic<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=XFiltered,ntrees = 1000)
+XYFiltered<-XFiltered
+XYFiltered$RC_ArMil<-RC_ArMil 
+ 
+rfMode_Basic<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=XYFiltered,ntrees = 500)
 print(rfMode_Basic$FinalModel)
+
+
+rf_model <- randomForest(RC_Condition ~ Kerulet+RC_ArMil,data = XYFiltered)
+plot(rf_model, ylim=c(0,0.36))
+legend('topright', colnames(rf_model$err.rate), col=1:8, fill=1:8)
+
 
 
 rfMode_Basic<-randomForest(RC_ArMil~MeretCleared+Kerulet,data=XFiltered,ntrees = 1000)
