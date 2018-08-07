@@ -187,9 +187,37 @@ I am dropping the flats whose floorsize is missing
 ```{r MeretClearred}
 AnalysisAdDetailList<-AnalysisAdDetailList[!is.na(AnalysisAdDetailList$MeretCleared),]
 
-AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(-MeretCleared)), ]
+AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(-xtfrm(AnalysisAdDetailList$MeretCleared))), ]
 head(AnalysisAdDetailList[,c("SiteID","SiteUrl","MeretCleared")])
 AnalysisAdDetailList$MeretCleared<-as.integer(as.character(AnalysisAdDetailList$MeretCleared))
+summary(AnalysisAdDetailList$MeretCleared)# JESUS
+
+
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="77293656","MeretCleared"]<-54
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="79203941","MeretCleared"]<-130
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76934101","MeretCleared"]<-52
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945399","MeretCleared"]<-60
+
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945398","MeretCleared"]<-57
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945569","MeretCleared"]<-57
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945397","MeretCleared"]<-97
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945581","MeretCleared"]<-53
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="77391121","MeretCleared"]<-118
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981886","MeretCleared"]<-53
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76945396","MeretCleared"]<-134
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76913761","MeretCleared"]<-56
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="75347668","MeretCleared"]<-67
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="74168404","MeretCleared"]<-23
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981931","MeretCleared"]<-30
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981929","MeretCleared"]<-54
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981887","MeretCleared"]<-51
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981921","MeretCleared"]<-73
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981884","MeretCleared"]<-74
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981925","MeretCleared"]<-42
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981926","MeretCleared"]<-56
+AnalysisAdDetailList[AnalysisAdDetailList$SiteID=="76981927","MeretCleared"]<-58
+
+
 ```
 ###Number of uploaded pictures (PicNums)
 ```{r PicNums}
@@ -555,6 +583,14 @@ totalpattern<-paste0(pattern2,"|",pattern2,"|",patternM)
 #AnalysisAdDetailList$RefNum<-gsub((pattern)|(pattern2)|(patternM),"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T)
 AnalysisAdDetailList$ReferenceNumber<-ifelse(grepl(totalpattern,AnalysisAdDetailList$RC_Description,ignore.case=T),gsub(totalpattern,"\\1\\2\\3",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
 
+
+#Unfinished builds
+patternUnCon<-".*várható átadás.*"
+
+AnalysisAdDetailList[AnalysisAdDetailList$Allapot %in% c("Új","Új Építésű") & grepl(patternUnCon,AnalysisAdDetailList$RC_Description,ignore.case=T),"RC_Condition"]<-"Építés alatt"
+
+
+
 #AnalysisAdDetailList$RefNum<-ifelse(grepl(pattern,AnalysisAdDetailList$RC_Description,ignore.case=T),sub(pattern,"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
 
 #AnalysisAdDetailList$RefNum2<-ifelse(grepl(pattern2,AnalysisAdDetailList$RC_Description,ignore.case=T),gsub(pattern2,"\\1",AnalysisAdDetailList$RC_Description,ignore.case=T),NA)
@@ -579,14 +615,9 @@ AnalysisAdDetailList<-AnalysisAdDetailList[with(AnalysisAdDetailList, order(Devi
 flog.info("FINISHED: identifying_the_proper_IDs")
 ```
 
-##Dropping Unused columns
-```{r dropping_columns}
-flog.info("STARTED: Droping unused columns")
-AnalysisAdDetailList<-AnalysisAdDetailList[,!(names(AnalysisAdDetailList) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos","Latitude","Longitude"))]
-flog.info("FINISHED: dropping_columns")
-```
 
-##Exporting to the ShinyApp
+
+#Exporting to the ShinyApp
 ```{r Exporting_to_Shiny}
 flog.info("STARTED: Exporting_to_Shiny")
 #I had to push the filters and calculations here in order to fit into the RAM limits of the free tier of shinapps.io. 
@@ -638,6 +669,23 @@ drop_upload(paste(Shinyfolder,ShinyAdListFile,sep="/"), path = NULL, mode = "ove
 flog.info("FINISHED: Exporting_to_Shiny")
 ```
 
+#Rescoping and deduplication
+##Crude deduplication
+
+```{r crude_deduplication,purl=FALSE}
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
+AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
+
+References<-is.na(AnalysisAdDetailList$ReferenceNumber)
+Noreference<-AnalysisAdDetailList[References,]
+Reference<-AnalysisAdDetailList[!References,]
+Reference<-Reference[!duplicated(Reference[c("ReferenceNumber")]),]
+
+AnalysisAdDetailList<-rbind(Noreference,Reference)
+
+flog.info("COMPLETED: crude_deduplication")
+```
+
 ##Fuzzy Deduplication
 After finishing the data cleaning, we are now able to use these variables to find fuzzyduplicates, or near matches using compare.linkage and recordlinkage() packages. The following experimenting relies on information gathered from the article by the package authors( available here:https://journal.r-project.org/archive/2010-2/RJournal_2010-2_Sariyar+Borg.pdf)
 
@@ -645,7 +693,7 @@ There are two broad approaches for identifying duplicates:stochastic methods and
 a successful classification is maximum. 
 
 Let's load the library and generate a simple control table for comparison.
-```{r RecordLinkage,purl=FALSE, eval=FALSE}
+```{r RecordLinkage, purl=FALSE, eval=FALSE}
 flog.info("STARTED: RecordLinkage")
 library(RecordLinkage)
 #small reproducible test
@@ -775,28 +823,115 @@ write.csv(AdPairs,file="correctedpairs.csv")
 #LongfuzzyrpairsDefault<-compare.dedup(DedupeTestLong, blockfld =c("Kerulet","MeretCleared"), strcmp = TRUE, )
 flog.info("FINISHED: RecordLinkage")
 ```
+
 #Feature Engineering
 I am going to ditch unspecified sale types then do a skewedness analysis
+Then
 
-
-
-
-```{r Feature_engineering}
+```{r Feature_engineering,purl=FALSE, eval=FALSE}
 library(psych)
 AnalysisAdDetailList2<-AnalysisAdDetailList[AnalysisAdDetailList$RC_Title=="Title_Ownership",]
 AnalysisAdDetailList2<-AnalysisAdDetailList2[AnalysisAdDetailList2$RC_ArMil>4,]
+AnalysisAdDetailList2<-AnalysisAdDetailList2[!is.na(AnalysisAdDetailList2$Kerulet),]
 skew(AnalysisAdDetailList2$RC_ArMil)
 qqnorm(AnalysisAdDetailList2$RC_ArMil)
-qqline(AnalysisAdDetailList2$RC_ArMil)
+qqline(AnalysisAdDetailList2$RC_ArMil) #oh no
 AnalysisAdDetailList2$RC_ArMil <- log(AnalysisAdDetailList2$RC_ArMil)
 skew(AnalysisAdDetailList2$RC_ArMil)
 qqnorm(AnalysisAdDetailList2$RC_ArMil)
-qqline(AnalysisAdDetailList2$RC_ArMil)
+qqline(AnalysisAdDetailList2$RC_ArMil)# much nicer:)
 ggplot(data= AnalysisAdDetailList2, aes(x=RC_ArMil)) +
         geom_histogram() + labs(x='Price Historgram')
 
+#sqmeter
+
+#this plot gives us price-floorsize 
+ggplot(data=AnalysisAdDetailList2[!is.na(AnalysisAdDetailList2$RC_ArMil),], aes(x=MeretCleared, y=RC_ArMil))+
+        geom_point(col='blue') + geom_smooth(method = "lm", se=FALSE, color="black", aes(group=1)) +
+        scale_y_continuous(breaks= seq(0, 800000, by=100000)) +
+        geom_text_repel(aes(label = ifelse(AnalysisAdDetailList2$MeretCleared[!is.na(AnalysisAdDetailList2$RC_ArMil)]>4500, rownames(AnalysisAdDetailList2), ''))) #this is ridiculous
+AnalysisAdDetailList2<-AnalysisAdDetailList2[AnalysisAdDetailList2$MeretCleared<=400 & AnalysisAdDetailList2$MeretCleared>=10,]
+cor(AnalysisAdDetailList2$RC_ArMil, AnalysisAdDetailList2$MeretCleared, use= "pairwise.complete.obs")
+flog.info("COMPLETED: Feature_engineering")
+```
+#Preparing for modeling
+
+##Dropping Unused columns
+```{r dropping_columns}
+flog.info("STARTED: Droping unused columns")
+AnalysisAdDetailList2<-AnalysisAdDetailList2[,!(names(AnalysisAdDetailList2) %in% c("Helyseg","Meret","Ar","Deviance","Szobakszama", "Kategoria","PublishedTime","QueryState", "Havikozoskoltseg","Ingatlantipusa","Lift","Gepesitett","SzobaSzamCleared","Felszobakszama","SiteUrl","Riaszto","KulonWC","Tulajdonjogberletijog","Legkondicinalo","Belmagassag","Futestipusa","Allapot","Emelet","Butorozotte","Description","Ingatlanfelszereltsege","Hirdeto","Kertkapcsolatos","Latitude","Longitude"))]
+flog.info("FINISHED: dropping_columns")
+```
+
+
+##PreProcessing predictor variables
+###removing numeric skewedness
+removing skewedness
+```{r preprocessing, eval=FALSE,purl=FALSE}
+sum(is.na(AnalysisAdDetailList2$MeretCleared))
+
+if (abs(skew(AnalysisAdDetailList2$MeretCleared))>0.8){AnalysisAdDetailList2$MeretCleared <- log(AnalysisAdDetailList2$MeretCleared +1)}
+
+PreNum<-preProcess(as.data.frame(AnalysisAdDetailList2$MeretCleared), method=c("center","scale"))
+DFnorm <- predict(PreNum, as.data.frame(AnalysisAdDetailList2$MeretCleared))
+dim(DFnorm)
 
 ```
+
+### one hot encoding categorical variables
+
+```{r endocing, eval=FALSE,purl=FALSE}
+
+categoricalvariables<-as.data.frame(AnalysisAdDetailList2[,c("RC_Condition","Kerulet")])
+DFdummies <- as.data.frame(model.matrix(~.-1, categoricalvariables))
+dim(DFdummies)
+
+#check if some values are absent in the test set
+ZerocolTest <- which(colSums(DFdummies[(nrow(AnalysisAdDetailList2[!is.na(AnalysisAdDetailList2$RC_ArMil),])+1):nrow(AnalysisAdDetailList2),])==0)
+colnames(DFdummies[ZerocolTest])
+
+
+
+#Also taking out variables with less than 10 ‘ones’ in the train set.
+fewOnes <- which(colSums(DFdummies[1:nrow(AnalysisAdDetailList2[!is.na(AnalysisAdDetailList2$RC_ArMil),]),])<10)
+colnames(DFdummies[fewOnes])
+
+
+
+#Merging the dataframes
+combined<-cbind(DFnorm, DFdummies)
+
+```
+
+
+
+# GBX model selection
+
+```{r RandomForestmodel}
+xgb_grid = expand.grid(
+nrounds = 1000,
+eta = c(0.1, 0.05, 0.01),
+max_depth = c(2, 3, 4, 5, 6),
+gamma = 0,
+colsample_bytree=1,
+min_child_weight=c(1, 2, 3, 4 ,5),
+subsample=1
+)
+
+#caret finds my parameters
+
+xgb_caret <- train(x=combined, y=AnalysisAdDetailList2$RC_ArMil[!is.na(AnalysisAdDetailList2$RC_ArMil)], method='xgbTree', trControl= TRC_CV5, tuneGrid=xgb_grid)
+#xgb_caret$bestTune
+
+
+
+
+```
+
+
+
+
+
 
 #Data Splitting and Cross-validation
 
@@ -840,12 +975,6 @@ The various crossvalidation techniques combat this by splitting a sample into tr
 
 One of the most widely  used techinque is the so called K-fold crossvalidation, which is essentially test on one, train on K-1 type of configuration with the typical K values of 3,5 and 10.
 
-##Crude deduplication
-
-```{r crude_deduplication,purl=FALSE}
-AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList$SiteID),]
-AnalysisAdDetailList<-AnalysisAdDetailList[!duplicated(AnalysisAdDetailList[c("MeretCleared","RC_Description","Kerulet")]),]
-```
 
 ##Data Partitioning
 ```{r data_partitioning,purl=FALSE}
@@ -874,6 +1003,8 @@ TRC_CV10<-trainControl(method="CV", number=10)
 TRC_CV5<-trainControl(method="CV", number=5)
 flog.info("FINISHED: cross_validation")
 ```
+
+
 
 #Model selection
 
